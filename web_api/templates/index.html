@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobPilot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <style>
+        body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f8fafc; }
+        .nav-active { color: #2563eb; background: #eff6ff; border-right: 3px solid #2563eb; }
+        .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 8px 12px; font-size: 14px; font-weight: 600; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-secondary { background: #f1f5f9; color: #334155; }
+        .input { width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; }
+        .label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden text-slate-800">
+    <aside class="w-64 bg-white border-r border-slate-200 flex flex-col">
+        <div class="px-6 py-5 border-b border-slate-100">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                    <iconify-icon icon="solar:case-minimalistic-bold-duotone" width="22"></iconify-icon>
+                </div>
+                <div>
+                    <div class="text-lg font-bold">JobPilot</div>
+                    <div class="text-xs text-slate-500">求职 CRM + Agent</div>
+                </div>
+            </div>
+        </div>
+        <nav class="flex-1 p-3 space-y-1">
+            <button class="nav-item nav-active w-full text-left px-4 py-3 rounded-md" data-page="dashboard" onclick="switchPage('dashboard', this)">工作台</button>
+            <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="import" onclick="switchPage('import', this)">导入岗位</button>
+            <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="jobs" onclick="switchPage('jobs', this)">岗位池</button>
+            <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="evidence" onclick="switchPage('evidence', this)">证据库</button>
+            <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="runs" onclick="switchPage('runs', this)">Agent 记录</button>
+            <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="settings" onclick="switchPage('settings', this)">模型设置</button>
+        </nav>
+    </aside>
+
+    <main class="flex-1 overflow-auto p-8">
+        <section id="page-dashboard">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold">工作台</h1>
+                <p class="text-sm text-slate-500 mt-1">跟踪岗位池、分析结果和投递进展。</p>
+            </div>
+            <div class="grid grid-cols-2 xl:grid-cols-5 gap-4">
+                <div class="panel p-5"><div class="text-sm text-slate-500">总岗位</div><div id="stat-total" class="text-3xl font-bold mt-2">0</div></div>
+                <div class="panel p-5"><div class="text-sm text-slate-500">待分析</div><div id="stat-new" class="text-3xl font-bold mt-2">0</div></div>
+                <div class="panel p-5"><div class="text-sm text-slate-500">已分析</div><div id="stat-analyzed" class="text-3xl font-bold mt-2">0</div></div>
+                <div class="panel p-5"><div class="text-sm text-slate-500">推荐投递</div><div id="stat-recommended" class="text-3xl font-bold mt-2">0</div></div>
+                <div class="panel p-5"><div class="text-sm text-slate-500">已投递</div><div id="stat-applied" class="text-3xl font-bold mt-2">0</div></div>
+            </div>
+        </section>
+
+        <section id="page-import" class="hidden">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold">导入岗位</h1>
+                <p class="text-sm text-slate-500 mt-1">使用稳定入口建立岗位池，不依赖招聘平台反爬。</p>
+            </div>
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <form id="manual-import-form" class="panel p-6 space-y-4" onsubmit="importManual(event)">
+                    <h2 class="font-bold">手动粘贴 JD</h2>
+                    <div><label class="label">职位名称</label><input class="input" name="title" required></div>
+                    <div><label class="label">公司</label><input class="input" name="company" required></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="label">城市</label><input class="input" name="city"></div>
+                        <div><label class="label">薪资</label><input class="input" name="salary"></div>
+                    </div>
+                    <div><label class="label">岗位链接</label><input class="input" name="url"></div>
+                    <div><label class="label">岗位描述</label><textarea class="input min-h-40" name="description" required></textarea></div>
+                    <button class="btn btn-primary" type="submit"><iconify-icon icon="solar:add-circle-bold-duotone"></iconify-icon>导入岗位</button>
+                    <div id="manual-import-result" class="text-sm"></div>
+                </form>
+                <form id="csv-import-form" class="panel p-6 space-y-4" onsubmit="importCsv(event)">
+                    <h2 class="font-bold">CSV / Excel 批量导入</h2>
+                    <p class="text-sm text-slate-500">支持列名：职位、公司、城市、薪资、岗位描述、任职要求、链接。</p>
+                    <input class="input" type="file" name="file" accept=".csv,.xlsx,.xls" required>
+                    <button class="btn btn-primary" type="submit"><iconify-icon icon="solar:upload-bold-duotone"></iconify-icon>上传导入</button>
+                    <div id="csv-import-result" class="text-sm"></div>
+                </form>
+                <form id="pdf-jd-import-form" class="panel p-6 space-y-4" onsubmit="importJdPdf(event)">
+                    <h2 class="font-bold">PDF JD 导入</h2>
+                    <p class="text-sm text-slate-500">上传招聘方 PDF，系统会抽取文本并自动推断职位、公司、城市和薪资。</p>
+                    <input class="input" type="file" name="file" accept=".pdf" required>
+                    <div><label class="label">职位名称（可选校正）</label><input class="input" name="title"></div>
+                    <div><label class="label">公司（可选校正）</label><input class="input" name="company"></div>
+                    <button class="btn btn-primary" type="submit"><iconify-icon icon="solar:file-send-bold-duotone"></iconify-icon>识别并导入</button>
+                    <div id="pdf-jd-import-result" class="text-sm"></div>
+                </form>
+            </div>
+        </section>
+
+        <section id="page-jobs" class="hidden">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold">岗位池</h1>
+                    <p class="text-sm text-slate-500 mt-1">批量分析、生成简历并管理岗位状态。</p>
+                </div>
+                <button class="btn btn-secondary" onclick="loadJobs()"><iconify-icon icon="solar:refresh-bold-duotone"></iconify-icon>刷新</button>
+            </div>
+            <div id="jobs-list" class="space-y-3"></div>
+        </section>
+
+        <section id="page-evidence" class="hidden">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold">个人经历证据库</h1>
+                <p class="text-sm text-slate-500 mt-1">简历生成只能引用这里的真实证据。</p>
+            </div>
+            <form class="panel p-6 flex flex-col xl:flex-row xl:items-end gap-4 mb-6" onsubmit="importResumePdf(event)">
+                <div class="flex-1">
+                    <h2 class="font-bold mb-2">PDF 简历导入</h2>
+                    <p class="text-sm text-slate-500 mb-3">上传已有 PDF 简历，自动抽取技能、项目、工作经历并写入证据库。</p>
+                    <input class="input" type="file" name="file" accept=".pdf" required>
+                </div>
+                <button class="btn btn-primary" type="submit"><iconify-icon icon="solar:document-add-bold-duotone"></iconify-icon>导入简历证据</button>
+                <div id="resume-pdf-import-result" class="text-sm xl:w-72"></div>
+            </form>
+            <form class="panel p-6 grid grid-cols-1 xl:grid-cols-4 gap-4 mb-6" onsubmit="createEvidence(event)">
+                <div>
+                    <label class="label">类型</label>
+                    <select class="input" name="type">
+                        <option value="skill">技能</option>
+                        <option value="project">项目</option>
+                        <option value="work_experience">工作经历</option>
+                        <option value="education">教育经历</option>
+                        <option value="achievement">成果</option>
+                    </select>
+                </div>
+                <div><label class="label">标题</label><input class="input" name="title" required></div>
+                <div><label class="label">技能标签</label><input class="input" name="skill_tags" placeholder="Python, FastAPI"></div>
+                <div class="flex items-end"><button class="btn btn-primary" type="submit"><iconify-icon icon="solar:add-circle-bold-duotone"></iconify-icon>新增证据</button></div>
+                <div class="xl:col-span-4"><label class="label">内容</label><textarea class="input min-h-24" name="content"></textarea></div>
+            </form>
+            <div id="evidence-list" class="space-y-3"></div>
+        </section>
+
+        <section id="page-runs" class="hidden">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold">Agent 记录</h1>
+                    <p class="text-sm text-slate-500 mt-1">查看岗位分析工作流的执行历史。</p>
+                </div>
+                <button class="btn btn-secondary" onclick="loadRuns()"><iconify-icon icon="solar:refresh-bold-duotone"></iconify-icon>刷新</button>
+            </div>
+            <div id="runs-list" class="space-y-3"></div>
+        </section>
+
+        <section id="page-settings" class="hidden">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold">模型设置</h1>
+                <p class="text-sm text-slate-500 mt-1">选择岗位分析和简历生成使用的模型。API Key 只从 .env 读取，不会在页面保存。</p>
+            </div>
+            <form class="panel p-6 max-w-4xl space-y-5" onsubmit="saveModelSettings(event)">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div>
+                        <label class="label">模型提供商</label>
+                        <select class="input" id="model-provider" name="provider" onchange="onProviderChanged()"></select>
+                    </div>
+                    <div>
+                        <label class="label">模型名称</label>
+                        <input class="input" id="model-name" name="model" list="model-options" placeholder="可选择，也可手动输入自定义模型" required>
+                        <datalist id="model-options"></datalist>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    <div>
+                        <label class="label flex items-center justify-between gap-3">
+                            <span>最大输出 Tokens</span>
+                            <span class="inline-flex items-center gap-1 text-xs font-normal text-slate-500">
+                                <input id="model-max-tokens-unlimited" type="checkbox" class="w-3.5 h-3.5" onchange="toggleLimitField('model-max-tokens')">
+                                不限
+                            </span>
+                        </label>
+                        <input class="input" id="model-max-tokens" name="max_tokens" type="number" min="256" max="32000" step="128">
+                    </div>
+                    <div>
+                        <label class="label flex items-center justify-between gap-3">
+                            <span>每分钟调用上限</span>
+                            <span class="inline-flex items-center gap-1 text-xs font-normal text-slate-500">
+                                <input id="model-rate-limit-unlimited" type="checkbox" class="w-3.5 h-3.5" onchange="toggleLimitField('model-rate-limit')">
+                                不限
+                            </span>
+                        </label>
+                        <input class="input" id="model-rate-limit" name="rate_limit" type="number" min="1" max="120">
+                    </div>
+                    <div>
+                        <label class="label flex items-center justify-between gap-3">
+                            <span>每日调用上限</span>
+                            <span class="inline-flex items-center gap-1 text-xs font-normal text-slate-500">
+                                <input id="model-daily-limit-unlimited" type="checkbox" class="w-3.5 h-3.5" onchange="toggleLimitField('model-daily-limit')">
+                                不限
+                            </span>
+                        </label>
+                        <input class="input" id="model-daily-limit" name="daily_limit" type="number" min="1" max="1000">
+                    </div>
+                </div>
+                <div id="model-base-url-wrap" class="hidden">
+                    <label class="label">Base URL（OpenAI Compatible 可选）</label>
+                    <input class="input" id="model-base-url" name="base_url" placeholder="https://api.openai.com/v1">
+                </div>
+                <div class="flex flex-wrap gap-6 text-sm">
+                    <label class="inline-flex items-center gap-2">
+                        <input id="model-cache-enabled" name="cache_enabled" type="checkbox" class="w-4 h-4">
+                        启用生成缓存
+                    </label>
+                    <label id="model-thinking-wrap" class="inline-flex items-center gap-2">
+                        <input id="model-enable-thinking" name="enable_thinking" type="checkbox" class="w-4 h-4">
+                        启用思考模式
+                    </label>
+                </div>
+                <div class="panel p-4 bg-slate-50">
+                    <div class="text-sm font-semibold">当前 API Key 状态</div>
+                    <div id="model-api-key-status" class="text-sm text-slate-600 mt-1"></div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="btn btn-primary" type="submit"><iconify-icon icon="solar:settings-bold-duotone"></iconify-icon>保存模型设置</button>
+                    <div id="model-settings-result" class="text-sm"></div>
+                </div>
+            </form>
+        </section>
+    </main>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

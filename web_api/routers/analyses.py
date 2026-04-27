@@ -1,0 +1,306 @@
+"""
+岗位分析 API
+"""
+import sys
+import os
+import json
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
+
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from pydantic import BaseModel
+from typing import Optional
+
+from src.storage.database import DatabaseManager
+from src.helpers import load_config
+
+router = APIRouter()
+
+
+def get_db():
+    config = load_config()
+    return DatabaseManager(config['storage']['db_path'])
+
+
+STALE_LLM_ERROR_MARKERS = (
+    "LLM 分析失败",
+    "codec can't encode",
+    "UnicodeEncodeError",
+    "illegal multibyte sequence",
+)
+
+LEGACY_WORDING_REPLACEMENTS = {
+    "补充能力缺口": "补充证据或调整简历表达",
+    "能力缺口": "简历可补强项",
+    "补充能力": "补充证据",
+    "能力不足": "证据暂未充分体现",
+}
+
+
+def _has_stale_llm_error(text: str | None) -> bool:
+    if not text:
+        return False
+    return any(marker in text for marker in STALE_LLM_ERROR_MARKERS)
+
+
+def _replace_legacy_wording(text: str | None) -> str | None:
+    if text is None:
+        return None
+    cleaned = text
+    for old, new in LEGACY_WORDING_REPLACEMENTS.items():
+        cleaned = cleaned.replace(old, new)
+    return cleaned
+
+
+def _sanitize_payload(value):
+    if isinstance(value, str):
+        return _replace_legacy_wording(value)
+    if isinstance(value, list):
+        return [_sanitize_payload(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_payload(item) for key, item in value.items()}
+    return value
+
+
+def _sanitize_analysis_text(
+    summary: str | None,
+    action_suggestion: str | None,
+    analyzer_type: str | None,
+) -> tuple[str | None, str | None, str | None]:
+    if _has_stale_llm_error(summary) or _has_stale_llm_error(action_suggestion):
+        return (
+            "LLM 暂不可用，当前展示基于规则评分的历史结果。建议重新点击“分析”刷新结果。",
+            "可作为备选机会，建议先补充证据或调整简历表达后再投递。",
+            "rule_fallback",
+        )
+
+    return (
+        _replace_legacy_wording(summary),
+        _replace_legacy_wording(action_suggestion),
+        analyzer_type,
+    )
+
+
+def _analysis_to_dict(a) -> dict:
+    def _parse(field):
+        if not field:
+            return []
+        try:
+            return json.loads(field)
+        except Exception:
+            return field
+
+    matched_evidence = _sanitize_payload(_parse(a.matched_evidence_json))
+    gaps = _sanitize_payload(_parse(a.gaps_json))
+    risks = _sanitize_payload(_parse(a.risks_json))
+    do_not_exaggerate = _sanitize_payload(_parse(a.do_not_exaggerate_json))
+    parsed_jd = _sanitize_payload(_parse(a.parsed_jd_json)) if a.parsed_jd_json else {}
+    summary, action_suggestion, analyzer_type = _sanitize_analysis_text(
+        a.summary,
+        a.action_suggestion,
+        a.analyzer_type,
+    )
+
+    return {
+        "id": a.id,
+        "job_id": a.job_id,
+        "match_score": a.match_score,
+        "risk_score": a.risk_score,
+        "recommendation_level": a.recommendation_level,
+        "summary": summary,
+        "action_suggestion": action_suggestion,
+        "matched_evidence": matched_evidence,
+        "gaps": gaps,
+        "risks": risks,
+        "do_not_exaggerate": do_not_exaggerate,
+        "parsed_jd": parsed_jd,
+        "score_explanation": build_score_explanation(
+            analyzer_type=analyzer_type,
+            match_score=a.match_score,
+            risk_score=a.risk_score,
+            recommendation_level=a.recommendation_level,
+            parsed_jd=parsed_jd if isinstance(parsed_jd, dict) else {},
+            matched_evidence=matched_evidence if isinstance(matched_evidence, list) else [],
+            gaps=gaps if isinstance(gaps, list) else [],
+        ),
+        "analyzer_type": analyzer_type,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    }
+
+
+def build_score_explanation(
+    analyzer_type: str | None,
+    match_score: int | None,
+    risk_score: int | None,
+    recommendation_level: str | None,
+    parsed_jd: dict,
+    matched_evidence: list,
+    gaps: list,
+) -> dict:
+    """生成前端可展示的评分机制说明。"""
+    required_skills = parsed_jd.get("required_skills", []) if isinstance(parsed_jd, dict) else []
+    skill_requirements = [str(item) for item in required_skills]
+    matched_requirements = [
+        str(item.get("requirement", ""))
+        for item in matched_evidence
+        if isinstance(item, dict) and item.get("requirement")
+    ]
+    missing_requirements = [
+        str(item.get("requirement", ""))
+        for item in gaps
+        if isinstance(item, dict) and item.get("requirement")
+    ]
+
+    analyzer = analyzer_type or "rule"
+    if analyzer == "hybrid":
+        formula = "混合评分：规则评分占 30%，LLM 深度分析占 70%。规则部分关注 JD 关键词、城市和薪资；LLM 部分关注语义匹配、岗位风险和证据充分性。"
+    elif analyzer == "llm":
+        formula = "LLM 评分：模型基于 JD、用户技能和证据库综合判断匹配度，并输出风险和简历可补强项。"
+    else:
+        formula = "规则评分：JD 技能证据匹配最高 70 分，城市偏好最高 10 分，薪资区间最高 10 分；推荐等级为 A≥75、B≥55、C≥35、D<35。"
+
+    return {
+        "formula": formula,
+        "analyzer_type": analyzer,
+        "match_score": match_score,
+        "risk_score": risk_score,
+        "recommendation_level": recommendation_level,
+        "skill_requirements": skill_requirements,
+        "matched_requirements": matched_requirements,
+        "missing_requirements": missing_requirements,
+        "risk_rule": "风险分主要来自 JD 要求在当前简历/证据库中未充分体现、城市/薪资偏好差异和 LLM 识别到的投递风险；分数越高代表越需要优化表达或调整投递优先级。",
+    }
+
+
+def _build_analyzer(config: dict, db):
+    """构建分析器（优先 LLM，失败降级到规则）"""
+    from src.analyzer.hybrid import HybridJobAnalyzer
+    from src.analyzer.rule_based import RuleBasedAnalyzer
+
+    resume_cfg = config.get("resume", {})
+    api_key_env = {
+        "claude": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "qwen": "DASHSCOPE_API_KEY",
+    }
+    provider_type = resume_cfg.get("provider", "qwen")
+    env_key = api_key_env.get(provider_type, "")
+    api_key = os.environ.get(env_key, "")
+
+    if api_key:
+        from src.resume.llm_providers import create_llm_provider
+        provider_cfg = {
+            "model": resume_cfg.get("model", "qwen3.5-plus"),
+            "max_tokens": resume_cfg.get("max_tokens", 2000),
+            "request_timeout": resume_cfg.get("request_timeout", 90),
+        }
+        if "enable_thinking" in resume_cfg:
+            provider_cfg["enable_thinking"] = resume_cfg["enable_thinking"]
+        if "base_url" in resume_cfg:
+            provider_cfg["base_url"] = resume_cfg["base_url"]
+        try:
+            llm = create_llm_provider(provider_type, api_key, provider_cfg)
+            return HybridJobAnalyzer(llm)
+        except Exception:
+            pass
+
+    return RuleBasedAnalyzer()
+
+
+def _load_profile(config: dict) -> dict:
+    profile_path = config.get("profile_path", "config/user_profile.json")
+    try:
+        with open(profile_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+@router.post("/jobs/{job_id}")
+async def analyze_job(job_id: int):
+    """对单个岗位执行分析"""
+    db = get_db()
+    config = load_config()
+    try:
+        job = db.get_job_by_id(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="岗位不存在")
+
+        profile = _load_profile(config)
+        analyzer = _build_analyzer(config, db)
+
+        from src.agent.workflow import JobAnalysisWorkflow
+        workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile)
+        result = workflow.run(job_id)
+
+        if result.get("success"):
+            analysis_data = result.get("analysis", {})
+            analysis_data["score_explanation"] = build_score_explanation(
+                analyzer_type=analysis_data.get("analyzer_type"),
+                match_score=analysis_data.get("match_score"),
+                risk_score=analysis_data.get("risk_score"),
+                recommendation_level=analysis_data.get("recommendation_level"),
+                parsed_jd=analysis_data.get("parsed_jd") or {},
+                matched_evidence=analysis_data.get("matched_evidence") or [],
+                gaps=analysis_data.get("gaps") or [],
+            )
+            return {"success": True, "data": analysis_data,
+                    "run_id": result.get("run_id")}
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "分析失败"))
+    finally:
+        db.close()
+
+
+class BatchAnalyzeRequest(BaseModel):
+    job_ids: list[int]
+
+
+@router.post("/batch")
+async def batch_analyze(req: BatchAnalyzeRequest, background_tasks: BackgroundTasks):
+    """批量分析岗位（后台执行）"""
+    db = get_db()
+    config = load_config()
+
+    if not req.job_ids:
+        raise HTTPException(status_code=400, detail="job_ids 不能为空")
+
+    profile = _load_profile(config)
+    analyzer = _build_analyzer(config, db)
+
+    results = []
+    for job_id in req.job_ids[:20]:  # 限制单次批量
+        from src.agent.workflow import JobAnalysisWorkflow
+        workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile)
+        r = workflow.run(job_id)
+        results.append({"job_id": job_id, "success": r.get("success"),
+                         "run_id": r.get("run_id")})
+
+    db.close()
+    return {"success": True, "results": results}
+
+
+@router.get("/{analysis_id}")
+async def get_analysis(analysis_id: int):
+    """获取分析结果"""
+    db = get_db()
+    try:
+        a = db.get_analysis_by_id(analysis_id)
+        if not a:
+            raise HTTPException(status_code=404, detail="分析结果不存在")
+        return {"success": True, "data": _analysis_to_dict(a)}
+    finally:
+        db.close()
+
+
+@router.get("/jobs/{job_id}/latest")
+async def get_job_analysis(job_id: int):
+    """获取岗位最新分析结果"""
+    db = get_db()
+    try:
+        a = db.get_analysis_by_job(job_id)
+        if not a:
+            raise HTTPException(status_code=404, detail="该岗位尚未分析")
+        return {"success": True, "data": _analysis_to_dict(a)}
+    finally:
+        db.close()

@@ -1,0 +1,14 @@
+profile_path: config/user_profile.json
+resume:
+  provider: qwen
+  model: qwen-plus
+  max_tokens: 2000
+  rate_limit: 10
+  daily_limit: 100
+  request_timeout: 90
+  cache_enabled: true
+  enable_thinking: false
+storage:
+  db_path: data/jobs.db
+  log_dir: logs
+  resume_dir: data/resumes

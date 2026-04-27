@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 环境变量
+.env
+
+# 本地个人配置
+config/config.yaml
+config/user_profile.json
+
+# 数据库
+data/jobs.db
+data/*.db
+data/cache/
+
+# 简历文件
+data/resumes/*.md
+data/resumes/*.pdf
+
+# 日志
+logs/*.log
+logs/
+
+# 本地浏览器资料和调试产物
+browser_profile/
+debug_*.png
+debug_*.html
+debug_*.py
+
+# 测试缓存
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright
+.playwright/
+
+# Claude 本地设置
+.claude/settings.local.json

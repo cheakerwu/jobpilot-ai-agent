@@ -1,0 +1,57 @@
+{
+  "basic_info": {
+    "name": "张三",
+    "age": 24,
+    "gender": "男",
+    "education": "本科",
+    "school": "示例大学",
+    "graduation_year": "2025",
+    "phone": "13800000000",
+    "email": "demo@example.com"
+  },
+  "skills": [
+    "Python",
+    "FastAPI",
+    "SQLAlchemy",
+    "Redis",
+    "Docker",
+    "LLM",
+    "AI Agent"
+  ],
+  "experiences": [
+    {
+      "title": "AI 求职助手项目",
+      "duration": "2025.03 - 2025.06",
+      "description": "基于 FastAPI、SQLite 和大模型接口构建岗位分析与定制简历生成工具。",
+      "tech_stack": [
+        "Python",
+        "FastAPI",
+        "SQLAlchemy",
+        "SQLite",
+        "LLM"
+      ],
+      "achievements": [
+        "实现岗位 JD 导入、证据库管理、匹配评分和简历版本生成。",
+        "通过规则分析与 LLM 增强分析结合，降低简历内容编造风险。"
+      ]
+    }
+  ],
+  "filter_preferences": {
+    "cities": [
+      "北京",
+      "上海",
+      "杭州"
+    ],
+    "salary_min": 15000,
+    "salary_max": 35000,
+    "keywords": [
+      "AI Agent",
+      "后端",
+      "LLM"
+    ],
+    "exclude_keywords": [
+      "外包",
+      "销售"
+    ]
+  }
+}
