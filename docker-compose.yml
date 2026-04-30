@@ -1,0 +1,16 @@
+services:
+  jobpilot:
+    build: .
+    container_name: jobpilot
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - JOBPILOT_ENV=production
+      - JOBPILOT_PORT=8000

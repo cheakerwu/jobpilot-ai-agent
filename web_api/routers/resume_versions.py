@@ -6,12 +6,14 @@ import os
 import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 
 from src.storage.database import DatabaseManager
 from src.helpers import load_config
+from src.auth.dependencies import get_current_user
+from src.storage.models import User
 
 router = APIRouter()
 
@@ -52,7 +54,7 @@ class GenerateResumeRequest(BaseModel):
 
 
 @router.post("/generate")
-async def generate_resume(req: GenerateResumeRequest):
+async def generate_resume(req: GenerateResumeRequest, current_user: User = Depends(get_current_user)):
     """为指定岗位生成定制简历"""
     db = get_db()
     config = load_config()
@@ -80,7 +82,7 @@ async def generate_resume(req: GenerateResumeRequest):
         evidence = [
             {"id": ev.id, "type": ev.type, "title": ev.title,
              "content": ev.content, "skill_tags": ev.get_skill_tags()}
-            for ev in db.get_evidence_list(user_id=1)
+            for ev in db.get_evidence_list(user_id=current_user.id)
         ]
 
         # 读取用户 profile
@@ -135,7 +137,7 @@ async def generate_resume(req: GenerateResumeRequest):
 
         # 保存简历版本
         rv = db.save_resume_version({
-            "user_id": 1,
+            "user_id": current_user.id,
             "job_id": req.job_id,
             "analysis_id": analysis_obj.id,
             "title": f"{job.title} @ {job.company}",
@@ -159,16 +161,16 @@ async def generate_resume(req: GenerateResumeRequest):
 
 
 @router.get("")
-async def list_resume_versions():
+async def list_resume_versions(current_user: User = Depends(get_current_user)):
     """获取所有简历版本"""
     db = get_db()
     try:
-        # 查所有用户1的简历版本
+        # 查当前用户的简历版本
         from src.storage.models import ResumeVersion
         from sqlalchemy import desc
         versions = (
             db.session.query(ResumeVersion)
-            .filter(ResumeVersion.user_id == 1)
+            .filter(ResumeVersion.user_id == current_user.id)
             .order_by(desc(ResumeVersion.created_at))
             .all()
         )
@@ -178,7 +180,7 @@ async def list_resume_versions():
 
 
 @router.get("/{version_id}")
-async def get_resume_version(version_id: int):
+async def get_resume_version(version_id: int, current_user: User = Depends(get_current_user)):
     """获取简历版本详情"""
     db = get_db()
     try:
@@ -191,7 +193,7 @@ async def get_resume_version(version_id: int):
 
 
 @router.get("/jobs/{job_id}")
-async def get_job_resume_versions(job_id: int):
+async def get_job_resume_versions(job_id: int, current_user: User = Depends(get_current_user)):
     """获取某岗位的所有简历版本"""
     db = get_db()
     try:

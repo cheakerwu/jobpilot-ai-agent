@@ -6,12 +6,14 @@ import os
 import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
 from typing import Optional
 
 from src.storage.database import DatabaseManager
 from src.helpers import load_config
+from src.auth.dependencies import get_current_user
+from src.storage.models import User
 
 router = APIRouter()
 
@@ -217,7 +219,7 @@ def _load_profile(config: dict) -> dict:
 
 
 @router.post("/jobs/{job_id}")
-async def analyze_job(job_id: int):
+async def analyze_job(job_id: int, current_user: User = Depends(get_current_user)):
     """对单个岗位执行分析"""
     db = get_db()
     config = load_config()
@@ -230,7 +232,7 @@ async def analyze_job(job_id: int):
         analyzer = _build_analyzer(config, db)
 
         from src.agent.workflow import JobAnalysisWorkflow
-        workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile)
+        workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile, user_id=current_user.id)
         result = workflow.run(job_id)
 
         if result.get("success"):
@@ -257,7 +259,7 @@ class BatchAnalyzeRequest(BaseModel):
 
 
 @router.post("/batch")
-async def batch_analyze(req: BatchAnalyzeRequest, background_tasks: BackgroundTasks):
+async def batch_analyze(req: BatchAnalyzeRequest, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
     """批量分析岗位（后台执行）"""
     db = get_db()
     config = load_config()
@@ -271,7 +273,7 @@ async def batch_analyze(req: BatchAnalyzeRequest, background_tasks: BackgroundTa
     results = []
     for job_id in req.job_ids[:20]:  # 限制单次批量
         from src.agent.workflow import JobAnalysisWorkflow
-        workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile)
+        workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile, user_id=current_user.id)
         r = workflow.run(job_id)
         results.append({"job_id": job_id, "success": r.get("success"),
                          "run_id": r.get("run_id")})
@@ -281,7 +283,7 @@ async def batch_analyze(req: BatchAnalyzeRequest, background_tasks: BackgroundTa
 
 
 @router.get("/{analysis_id}")
-async def get_analysis(analysis_id: int):
+async def get_analysis(analysis_id: int, current_user: User = Depends(get_current_user)):
     """获取分析结果"""
     db = get_db()
     try:
@@ -294,7 +296,7 @@ async def get_analysis(analysis_id: int):
 
 
 @router.get("/jobs/{job_id}/latest")
-async def get_job_analysis(job_id: int):
+async def get_job_analysis(job_id: int, current_user: User = Depends(get_current_user)):
     """获取岗位最新分析结果"""
     db = get_db()
     try:

@@ -6,6 +6,7 @@
     <title>JobPilot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <style>
         body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f8fafc; }
         .nav-active { color: #2563eb; background: #eff6ff; border-right: 3px solid #2563eb; }
@@ -15,6 +16,10 @@
         .btn-secondary { background: #f1f5f9; color: #334155; }
         .input { width: 100%; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; }
         .label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+        .kanban-column { min-width: 220px; max-width: 260px; flex-shrink: 0; }
+        .kanban-column.drag-over { background: #eff6ff; border-color: #2563eb; }
+        .kanban-card { cursor: grab; transition: opacity 0.15s; }
+        .kanban-card.dragging { opacity: 0.4; }
     </style>
 </head>
 <body class="h-screen flex overflow-hidden text-slate-800">
@@ -31,30 +36,24 @@
             </div>
         </div>
         <nav class="flex-1 p-3 space-y-1">
-            <button class="nav-item nav-active w-full text-left px-4 py-3 rounded-md" data-page="dashboard" onclick="switchPage('dashboard', this)">工作台</button>
+            <button class="nav-item nav-active w-full text-left px-4 py-3 rounded-md" data-page="kanban" onclick="switchPage('kanban', this)">看板</button>
             <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="import" onclick="switchPage('import', this)">导入岗位</button>
             <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="jobs" onclick="switchPage('jobs', this)">岗位池</button>
             <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="evidence" onclick="switchPage('evidence', this)">证据库</button>
             <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="runs" onclick="switchPage('runs', this)">Agent 记录</button>
+            <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="analytics" onclick="switchPage('analytics', this)">数据分析</button>
             <button class="nav-item w-full text-left px-4 py-3 rounded-md text-slate-600" data-page="settings" onclick="switchPage('settings', this)">模型设置</button>
         </nav>
+        <div class="p-4 border-t border-slate-100">
+            <div class="flex items-center justify-between">
+                <span id="current-username" class="text-sm text-slate-600 font-medium"></span>
+                <button onclick="logout()" class="text-xs text-slate-400 hover:text-red-500">退出</button>
+            </div>
+            <a href="/" class="text-xs text-slate-400 hover:text-blue-500 mt-1 block">返回首页</a>
+        </div>
     </aside>
 
     <main class="flex-1 overflow-auto p-8">
-        <section id="page-dashboard">
-            <div class="mb-6">
-                <h1 class="text-2xl font-bold">工作台</h1>
-                <p class="text-sm text-slate-500 mt-1">跟踪岗位池、分析结果和投递进展。</p>
-            </div>
-            <div class="grid grid-cols-2 xl:grid-cols-5 gap-4">
-                <div class="panel p-5"><div class="text-sm text-slate-500">总岗位</div><div id="stat-total" class="text-3xl font-bold mt-2">0</div></div>
-                <div class="panel p-5"><div class="text-sm text-slate-500">待分析</div><div id="stat-new" class="text-3xl font-bold mt-2">0</div></div>
-                <div class="panel p-5"><div class="text-sm text-slate-500">已分析</div><div id="stat-analyzed" class="text-3xl font-bold mt-2">0</div></div>
-                <div class="panel p-5"><div class="text-sm text-slate-500">推荐投递</div><div id="stat-recommended" class="text-3xl font-bold mt-2">0</div></div>
-                <div class="panel p-5"><div class="text-sm text-slate-500">已投递</div><div id="stat-applied" class="text-3xl font-bold mt-2">0</div></div>
-            </div>
-        </section>
-
         <section id="page-import" class="hidden">
             <div class="mb-6">
                 <h1 class="text-2xl font-bold">导入岗位</h1>
@@ -102,6 +101,17 @@
                 <button class="btn btn-secondary" onclick="loadJobs()"><iconify-icon icon="solar:refresh-bold-duotone"></iconify-icon>刷新</button>
             </div>
             <div id="jobs-list" class="space-y-3"></div>
+        </section>
+
+        <section id="page-kanban">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold">求职进度看板</h1>
+                    <p class="text-sm text-slate-500 mt-1">拖拽卡片切换岗位状态。</p>
+                </div>
+                <button class="btn btn-secondary" onclick="loadKanbanBoard()"><iconify-icon icon="solar:refresh-bold-duotone"></iconify-icon>刷新</button>
+            </div>
+            <div id="kanban-board" class="flex gap-4 overflow-x-auto pb-4"></div>
         </section>
 
         <section id="page-evidence" class="hidden">
@@ -220,6 +230,32 @@
                     <div id="model-settings-result" class="text-sm"></div>
                 </div>
             </form>
+        </section>
+
+        <section id="page-analytics" class="hidden">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold">薪资分析</h1>
+                <p class="text-sm text-slate-500 mt-1">基于岗位池数据的薪资分布与个人期望对比。</p>
+            </div>
+            <div id="salary-overview" class="grid grid-cols-2 xl:grid-cols-5 gap-4 mb-6"></div>
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div class="panel p-5">
+                    <div class="font-semibold mb-3">薪资分布</div>
+                    <canvas id="salary-distribution-chart" height="250"></canvas>
+                </div>
+                <div class="panel p-5">
+                    <div class="font-semibold mb-3">城市薪资对比</div>
+                    <canvas id="salary-by-city-chart" height="250"></canvas>
+                </div>
+                <div class="panel p-5">
+                    <div class="font-semibold mb-3">平台薪资对比</div>
+                    <canvas id="salary-by-platform-chart" height="250"></canvas>
+                </div>
+                <div class="panel p-5">
+                    <div class="font-semibold mb-3">与个人期望对比</div>
+                    <div id="salary-expectation-panel" class="text-sm text-slate-600"></div>
+                </div>
+            </div>
         </section>
     </main>
 

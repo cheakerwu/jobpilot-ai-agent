@@ -1,7 +1,7 @@
 """
 岗位管理 API
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 import json
@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from src.storage.database import DatabaseManager
 from src.helpers import load_config
+from src.auth.dependencies import get_current_user
+from src.storage.models import User
 
 router = APIRouter()
 
@@ -50,12 +52,13 @@ async def list_jobs(
     per_page: int = 20,
     status: Optional[str] = None,
     city: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
 ):
     """获取岗位列表（分页）"""
     db = get_db()
     try:
-        jobs = db.get_jobs_paginated(page, per_page, status, city)
-        total = db.get_jobs_count(status, city)
+        jobs = db.get_jobs_paginated(page, per_page, status, city, user_id=current_user.id)
+        total = db.get_jobs_count(status, city, user_id=current_user.id)
         return {
             "success": True,
             "data": [_job_to_dict(j) for j in jobs],
@@ -72,29 +75,33 @@ async def list_jobs(
 async def list_jobs_compat(
     page: int = 1, per_page: int = 20,
     status: Optional[str] = None, city: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
 ):
-    return await list_jobs(page, per_page, status, city)
+    return await list_jobs(page, per_page, status, city, current_user=current_user)
 
 
 @router.get("/stats")
-async def get_stats():
+async def get_stats(current_user: User = Depends(get_current_user)):
     """获取岗位统计数据"""
     db = get_db()
     try:
-        stats = db.get_statistics()
+        stats = db.get_statistics(user_id=current_user.id)
         return {"success": True, "data": stats}
     finally:
         db.close()
 
 
 @router.get("/{job_id}")
-async def get_job(job_id: int):
+async def get_job(job_id: int, current_user: User = Depends(get_current_user)):
     """获取岗位详情（含最新分析结果）"""
     db = get_db()
     try:
         job = db.get_job_by_id(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="岗位不存在")
+
+        if job.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权访问")
 
         data = _job_to_dict(job, include_analysis=True)
 
@@ -116,10 +123,16 @@ async def get_job(job_id: int):
 
 
 @router.patch("/{job_id}")
-async def update_job(job_id: int, req: JobUpdateRequest):
+async def update_job(job_id: int, req: JobUpdateRequest, current_user: User = Depends(get_current_user)):
     """更新岗位状态"""
     db = get_db()
     try:
+        job = db.get_job_by_id(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="岗位不存在")
+        if job.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权访问")
+
         updates = {k: v for k, v in req.model_dump().items() if v is not None}
         job = db.update_job(job_id, **updates)
         if not job:
@@ -130,7 +143,7 @@ async def update_job(job_id: int, req: JobUpdateRequest):
 
 
 @router.delete("/{job_id}")
-async def delete_job(job_id: int):
+async def delete_job(job_id: int, current_user: User = Depends(get_current_user)):
     """删除岗位"""
     db = get_db()
     try:
@@ -138,6 +151,8 @@ async def delete_job(job_id: int):
         job = db.get_job_by_id(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="岗位不存在")
+        if job.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权访问")
         db.session.delete(job)
         db.session.commit()
         return {"success": True, "message": "已删除"}

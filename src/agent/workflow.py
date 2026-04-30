@@ -20,10 +20,11 @@ class JobAnalysisWorkflow:
     每一步的执行状态都被记录到 DB (AgentRun / AgentStep)。
     """
 
-    def __init__(self, db, analyzer, profile: dict):
+    def __init__(self, db, analyzer, profile: dict, user_id: int = 1):
         self.db = db
         self.analyzer = analyzer
         self.profile = profile
+        self.user_id = user_id
         self._steps = [
             Step("parse_jd", self._step_parse_jd),
             Step("load_evidence", self._step_load_evidence),
@@ -38,7 +39,7 @@ class JobAnalysisWorkflow:
             return {"success": False, "error": f"Job {job_id} not found"}
 
         state: JobAgentState = {
-            "user_id": 1,
+            "user_id": self.user_id,
             "job_id": job_id,
             "job": self._job_to_dict(job),
             "profile": self.profile,
@@ -51,7 +52,7 @@ class JobAnalysisWorkflow:
         }
 
         run = self.db.create_agent_run({
-            "user_id": 1,
+            "user_id": self.user_id,
             "job_id": job_id,
             "workflow_name": "job_analysis",
             "status": "running",

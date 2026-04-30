@@ -1,5 +1,49 @@
 const API_BASE = "/api";
 
+// ── Auth ────────────────────────────────────────────────────────────────
+function getToken() {
+    return localStorage.getItem("token");
+}
+
+function getCurrentUser() {
+    try { return JSON.parse(localStorage.getItem("user")); } catch { return null; }
+}
+
+function logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    window.location.href = "/login";
+}
+
+function checkAuth() {
+    if (!getToken()) {
+        window.location.href = "/login";
+        return false;
+    }
+    return true;
+}
+
+// 所有 /api/* 请求自动带 Authorization header，401 时跳转登录
+const _origFetch = window.fetch.bind(window);
+window.fetch = async function (url, options = {}) {
+    const token = getToken();
+    if (token && typeof url === "string" && url.startsWith("/api/")) {
+        options.headers = options.headers || {};
+        if (options.headers instanceof Headers) {
+            options.headers.set("Authorization", `Bearer ${token}`);
+        } else {
+            options.headers["Authorization"] = `Bearer ${token}`;
+        }
+    }
+    const res = await _origFetch(url, options);
+    if (res.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+    }
+    return res;
+};
+
 function escapeHtml(value) {
     return String(value ?? "")
         .replaceAll("&", "&amp;")
@@ -15,19 +59,22 @@ function switchPage(page, target) {
     document.querySelectorAll(".nav-item").forEach((el) => el.classList.remove("nav-active"));
     if (target) target.classList.add("nav-active");
 
-    if (page === "dashboard") loadStats();
     if (page === "jobs") loadJobs();
+    if (page === "kanban") loadKanbanBoard();
     if (page === "evidence") loadEvidence();
     if (page === "runs") loadRuns();
+    if (page === "analytics") loadSalaryAnalytics();
     if (page === "settings") loadModelSettings();
 }
 
 async function loadStats() {
+    const el = document.getElementById("stat-total");
+    if (!el) return;
     const res = await fetch(`${API_BASE}/jobs/stats`);
     const data = await res.json();
     if (!data.success) return;
     const stats = data.data;
-    document.getElementById("stat-total").textContent = stats.total ?? 0;
+    el.textContent = stats.total ?? 0;
     document.getElementById("stat-new").textContent = stats.new ?? 0;
     document.getElementById("stat-analyzed").textContent = stats.analyzed ?? 0;
     document.getElementById("stat-recommended").textContent = stats.recommended ?? 0;
@@ -117,6 +164,8 @@ async function loadJobs() {
                     <button class="btn btn-secondary" onclick="showAnalysis(${job.id})"><iconify-icon icon="solar:chart-2-bold-duotone"></iconify-icon>匹配详情</button>
                     <button class="btn btn-primary" onclick="generateResume(${job.id})"><iconify-icon icon="solar:document-text-bold-duotone"></iconify-icon>生成简历</button>
                     <button class="btn btn-secondary" onclick="showResumeVersions(${job.id})"><iconify-icon icon="solar:documents-bold-duotone"></iconify-icon>简历版本</button>
+                    <button class="btn btn-secondary" onclick="generateCoverLetter(${job.id})"><iconify-icon icon="solar:letter-bold-duotone"></iconify-icon>Cover Letter</button>
+                    <button class="btn btn-secondary" onclick="generateInterviewPrep(${job.id})"><iconify-icon icon="solar:notebook-bold-duotone"></iconify-icon>面试准备</button>
                 </div>
             </div>
             <div id="job-result-${job.id}" class="text-sm mt-3 text-slate-600"></div>
@@ -586,6 +635,321 @@ async function saveModelSettings(event) {
     }
 }
 
+// ── Cover Letter & Interview Prep ──────────────────────────────────────
+
+async function generateCoverLetter(jobId) {
+    const result = document.getElementById(`job-result-${jobId}`);
+    result.textContent = "正在生成 Cover Letter...";
+    const res = await fetch(`${API_BASE}/cover-letters/generate`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({job_id: jobId}),
+    });
+    const data = await res.json();
+    result.innerHTML = data.success
+        ? renderCoverLetterPanel(data.data)
+        : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
+}
+
+function renderCoverLetterPanel(cl) {
+    const evidenceLinks = Array.isArray(cl.evidence_links) ? cl.evidence_links : [];
+    const highlights = Array.isArray(cl.highlights) ? cl.highlights : [];
+    return `
+        <div class="mt-4 border-t border-slate-200 pt-4 space-y-4">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <div class="font-semibold text-slate-800">Cover Letter #${cl.id}</div>
+                    <div class="text-xs text-slate-500">${escapeHtml(cl.title || "")} · ${escapeHtml(cl.created_at || "")}</div>
+                </div>
+                <button class="btn btn-secondary" onclick="copyCoverLetterContent(${cl.id})"><iconify-icon icon="solar:copy-bold-duotone"></iconify-icon>复制</button>
+            </div>
+            ${highlights.length ? `<div><div class="font-semibold text-slate-800">核心亮点</div><div class="flex flex-wrap gap-2 mt-2">${highlights.map((h) => `<span class="px-2 py-1 rounded bg-green-50 text-green-700 text-xs">${escapeHtml(h)}</span>`).join("")}</div></div>` : ""}
+            ${evidenceLinks.length ? `<div><div class="font-semibold text-slate-800">引用证据</div><ul class="mt-2 space-y-1">${evidenceLinks.slice(0, 6).map((e) => `<li class="bg-green-50 rounded-md p-2 text-green-800 text-sm">证据 #${escapeHtml(e.evidence_id)}：${escapeHtml(e.bullet_text || "")}</li>`).join("")}</ul></div>` : ""}
+            <div>
+                <div class="font-semibold text-slate-800 mb-2">求职信预览</div>
+                <pre id="cover-letter-content-${cl.id}" class="bg-slate-950 text-slate-50 rounded-md p-4 overflow-auto max-h-[400px] whitespace-pre-wrap text-sm leading-6">${escapeHtml(cl.content || "")}</pre>
+            </div>
+        </div>
+    `;
+}
+
+async function copyCoverLetterContent(clId) {
+    const el = document.getElementById(`cover-letter-content-${clId}`);
+    if (!el) return;
+    await navigator.clipboard.writeText(el.innerText);
+}
+
+async function generateInterviewPrep(jobId) {
+    const result = document.getElementById(`job-result-${jobId}`);
+    result.textContent = "正在生成面试准备材料...";
+    const res = await fetch(`${API_BASE}/interview-prep/generate`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({job_id: jobId}),
+    });
+    const data = await res.json();
+    result.innerHTML = data.success
+        ? renderInterviewPrepPanel(data.data)
+        : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
+}
+
+function renderInterviewPrepPanel(prep) {
+    const questions = Array.isArray(prep.questions) ? prep.questions : [];
+    const tips = Array.isArray(prep.preparation_tips) ? prep.preparation_tips : [];
+    const risks = Array.isArray(prep.risk_areas) ? prep.risk_areas : [];
+    const insights = prep.company_insights || {};
+    const categoryColors = {
+        "技术": "bg-blue-100 text-blue-700",
+        "项目": "bg-indigo-100 text-indigo-700",
+        "行为": "bg-amber-100 text-amber-700",
+        "岗位匹配": "bg-green-100 text-green-700",
+    };
+
+    return `
+        <div class="mt-4 border-t border-slate-200 pt-4 space-y-4">
+            <div class="font-semibold text-slate-800">面试问题 (${questions.length})</div>
+            <div class="space-y-3">
+                ${questions.map((q, i) => {
+                    const cat = q.category || "通用";
+                    const color = categoryColors[cat] || "bg-slate-100 text-slate-700";
+                    return `
+                        <div class="bg-slate-50 rounded-md p-3">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="px-2 py-0.5 rounded text-xs ${color}">${escapeHtml(cat)}</span>
+                                <span class="font-medium text-slate-800">Q${i + 1}: ${escapeHtml(q.question || "")}</span>
+                            </div>
+                            <p class="text-sm text-slate-600 mt-1">${escapeHtml(q.answer || "")}</p>
+                        </div>
+                    `;
+                }).join("")}
+            </div>
+            ${tips.length ? `<div><div class="font-semibold text-slate-800">准备建议</div><ul class="mt-2 space-y-1">${tips.map((t) => `<li class="text-sm text-slate-600">- ${escapeHtml(t)}</li>`).join("")}</ul></div>` : ""}
+            ${risks.length ? `<div><div class="font-semibold text-slate-800">风险领域</div><ul class="mt-2 space-y-2">${risks.map((r) => `<li class="bg-amber-50 rounded-md p-2 text-amber-800 text-sm">${escapeHtml(r.area || "")}: ${escapeHtml(r.suggestion || "")}</li>`).join("")}</ul></div>` : ""}
+        </div>
+    `;
+}
+
+// ── End Cover Letter & Interview Prep ──────────────────────────────────
+
+// ── Salary Analytics ───────────────────────────────────────────────────
+
+let salaryChartInstances = {};
+
+async function loadSalaryAnalytics() {
+    const overview = document.getElementById("salary-overview");
+    overview.innerHTML = "<div class='text-sm text-slate-500'>加载中...</div>";
+    const res = await fetch(`${API_BASE}/analytics/salary`);
+    const data = await res.json();
+    if (!data.success) {
+        overview.innerHTML = "<div class='text-sm text-red-500'>加载失败</div>";
+        return;
+    }
+    const d = data.data;
+    renderSalaryOverview(d.overall);
+    renderDistributionChart(d.distribution);
+    renderCityChart(d.by_city);
+    renderPlatformChart(d.by_platform);
+    renderExpectationPanel(d.vs_expectation, d.overall);
+}
+
+function renderSalaryOverview(overall) {
+    const container = document.getElementById("salary-overview");
+    const fmt = (v) => v ? `${(v / 1000).toFixed(1)}K` : "-";
+    container.innerHTML = `
+        <div class="panel p-5"><div class="text-sm text-slate-500">有效岗位</div><div class="text-3xl font-bold mt-2">${overall.count}</div></div>
+        <div class="panel p-5"><div class="text-sm text-slate-500">平均薪资</div><div class="text-3xl font-bold mt-2">${fmt(overall.avg)}</div></div>
+        <div class="panel p-5"><div class="text-sm text-slate-500">中位数</div><div class="text-3xl font-bold mt-2">${fmt(overall.median)}</div></div>
+        <div class="panel p-5"><div class="text-sm text-slate-500">最低</div><div class="text-3xl font-bold mt-2">${fmt(overall.min)}</div></div>
+        <div class="panel p-5"><div class="text-sm text-slate-500">最高</div><div class="text-3xl font-bold mt-2">${fmt(overall.max)}</div></div>
+    `;
+}
+
+function destroyChart(id) {
+    if (salaryChartInstances[id]) {
+        salaryChartInstances[id].destroy();
+        delete salaryChartInstances[id];
+    }
+}
+
+function renderDistributionChart(distribution) {
+    destroyChart("distribution");
+    const ctx = document.getElementById("salary-distribution-chart");
+    if (!ctx) return;
+    salaryChartInstances["distribution"] = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: distribution.buckets,
+            datasets: [{label: "岗位数", data: distribution.counts, backgroundColor: "#3b82f6", borderRadius: 4}],
+        },
+        options: {responsive: true, plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true, ticks: {stepSize: 1}}}},
+    });
+}
+
+function renderCityChart(byCity) {
+    destroyChart("city");
+    const ctx = document.getElementById("salary-by-city-chart");
+    if (!ctx) return;
+    const entries = Object.entries(byCity).slice(0, 10);
+    salaryChartInstances["city"] = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: entries.map(([k]) => k),
+            datasets: [{label: "平均薪资 (K)", data: entries.map(([, v]) => v.avg / 1000), backgroundColor: "#10b981", borderRadius: 4}],
+        },
+        options: {indexAxis: "y", responsive: true, plugins: {legend: {display: false}}},
+    });
+}
+
+function renderPlatformChart(byPlatform) {
+    destroyChart("platform");
+    const ctx = document.getElementById("salary-by-platform-chart");
+    if (!ctx) return;
+    const entries = Object.entries(byPlatform);
+    const colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+    salaryChartInstances["platform"] = new Chart(ctx, {
+        type: "doughnut",
+        data: {
+            labels: entries.map(([k]) => `${k} (${byPlatform[k].count})`),
+            datasets: [{data: entries.map(([, v]) => v.avg), backgroundColor: colors.slice(0, entries.length)}],
+        },
+        options: {responsive: true, plugins: {legend: {position: "bottom", labels: {font: {size: 11}}}}},
+    });
+}
+
+function renderExpectationPanel(exp, overall) {
+    const container = document.getElementById("salary-expectation-panel");
+    if (!exp.user_min && !exp.user_max) {
+        container.innerHTML = '<p class="text-slate-400">未设置薪资期望，请在 config/user_profile.json 的 filter_preferences 中设置 salary_min 和 salary_max。</p>';
+        return;
+    }
+    const fmt = (v) => `${(v / 1000).toFixed(0)}K`;
+    const total = exp.above_count + exp.within_count + exp.below_count || 1;
+    const pctWithin = (exp.within_count / total * 100).toFixed(0);
+    const pctAbove = (exp.above_count / total * 100).toFixed(0);
+    const pctBelow = (exp.below_count / total * 100).toFixed(0);
+    container.innerHTML = `
+        <div class="mb-3">期望范围：<span class="font-semibold">${fmt(exp.user_min)} - ${fmt(exp.user_max)}</span></div>
+        <div class="space-y-2">
+            <div><span class="inline-block w-20 text-slate-500">高于期望</span><span class="font-semibold text-amber-700">${exp.above_count} 个 (${pctAbove}%)</span></div>
+            <div><span class="inline-block w-20 text-slate-500">符合期望</span><span class="font-semibold text-green-700">${exp.within_count} 个 (${pctWithin}%)</span></div>
+            <div><span class="inline-block w-20 text-slate-500">低于期望</span><span class="font-semibold text-red-700">${exp.below_count} 个 (${pctBelow}%)</span></div>
+        </div>
+        <div class="mt-3 h-3 bg-slate-100 rounded-full overflow-hidden flex">
+            <div class="bg-amber-400" style="width:${pctAbove}%"></div>
+            <div class="bg-green-400" style="width:${pctWithin}%"></div>
+            <div class="bg-red-400" style="width:${pctBelow}%"></div>
+        </div>
+    `;
+}
+
+// ── End Salary Analytics ───────────────────────────────────────────────
+
+// ── Kanban Board ───────────────────────────────────────────────────────
+
+const KANBAN_STATUSES = [
+    {key: "new", label: "新导入", color: "slate"},
+    {key: "analyzed", label: "已分析", color: "blue"},
+    {key: "recommended", label: "推荐", color: "green"},
+    {key: "resume_generated", label: "简历已生成", color: "indigo"},
+    {key: "to_apply", label: "待投递", color: "violet"},
+    {key: "applied", label: "已投递", color: "purple"},
+    {key: "screening", label: "筛选中", color: "amber"},
+    {key: "interviewing", label: "面试中", color: "orange"},
+    {key: "offer", label: "Offer", color: "emerald"},
+    {key: "rejected", label: "已拒绝", color: "red"},
+    {key: "archived", label: "已归档", color: "gray"},
+];
+
+async function loadKanbanBoard() {
+    const board = document.getElementById("kanban-board");
+    board.innerHTML = "<div class='text-sm text-slate-500'>加载中...</div>";
+    const res = await fetch(`${API_BASE}/kanban/board`);
+    const data = await res.json();
+    if (!data.success) {
+        board.innerHTML = "<div class='text-sm text-red-500'>加载失败</div>";
+        return;
+    }
+    const grouped = data.data;
+    board.innerHTML = KANBAN_STATUSES.map((s) => renderKanbanColumn(s.key, s.label, grouped[s.key] || [])).join("");
+}
+
+function renderKanbanColumn(status, label, jobs) {
+    const countBadge = jobs.length > 0
+        ? `<span class="ml-2 px-1.5 py-0.5 rounded bg-slate-200 text-xs font-medium">${jobs.length}</span>`
+        : "";
+    return `
+        <div class="kanban-column panel p-3 flex flex-col" data-status="${escapeHtml(status)}"
+             ondragover="kanbanDragOver(event)" ondragleave="kanbanDragLeave(event)" ondrop="kanbanDrop(event, '${escapeHtml(status)}')">
+            <div class="font-semibold text-sm text-slate-700 mb-3 flex items-center">${escapeHtml(label)}${countBadge}</div>
+            <div class="space-y-2 flex-1 min-h-[60px]">
+                ${jobs.map((j) => renderKanbanCard(j)).join("")}
+            </div>
+        </div>
+    `;
+}
+
+function renderKanbanCard(job) {
+    return `
+        <div class="kanban-card panel p-3" draggable="true"
+             data-job-id="${job.id}"
+             ondragstart="kanbanDragStart(event, ${job.id})" ondragend="kanbanDragEnd(event)">
+            <div class="font-bold text-sm">${escapeHtml(job.title)}</div>
+            <div class="text-xs text-slate-500 mt-1">${escapeHtml(job.company)}</div>
+            <div class="flex items-center justify-between mt-2 text-xs text-slate-400">
+                <span>${escapeHtml(job.city || "-")}</span>
+                <span>${escapeHtml(job.salary || "-")}</span>
+            </div>
+            ${job.match_score != null ? `<div class="mt-1 text-xs"><span class="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">匹配 ${job.match_score}</span></div>` : ""}
+        </div>
+    `;
+}
+
+function kanbanDragStart(event, jobId) {
+    event.dataTransfer.setData("text/plain", String(jobId));
+    event.target.classList.add("dragging");
+}
+
+function kanbanDragEnd(event) {
+    event.target.classList.remove("dragging");
+}
+
+function kanbanDragOver(event) {
+    event.preventDefault();
+    const col = event.currentTarget;
+    col.classList.add("drag-over");
+}
+
+function kanbanDragLeave(event) {
+    event.currentTarget.classList.remove("drag-over");
+}
+
+async function kanbanDrop(event, newStatus) {
+    event.preventDefault();
+    event.currentTarget.classList.remove("drag-over");
+    const jobId = event.dataTransfer.getData("text/plain");
+    if (!jobId) return;
+
+    const res = await fetch(`${API_BASE}/kanban/jobs/${jobId}/move`, {
+        method: "PATCH",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({new_status: newStatus}),
+    });
+    const data = await res.json();
+    if (data.success) {
+        loadKanbanBoard();
+        loadStats();
+    } else {
+        alert(data.detail || data.message || "移动失败");
+    }
+}
+
+// ── End Kanban ─────────────────────────────────────────────────────────
+
 window.addEventListener("load", () => {
-    loadStats();
+    checkAuth();
+    loadKanbanBoard();
+    // 显示当前用户名
+    const user = getCurrentUser();
+    const el = document.getElementById("current-username");
+    if (el && user) el.textContent = user.username;
 });

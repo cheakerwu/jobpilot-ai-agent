@@ -12,7 +12,8 @@ from src.helpers import load_config
 
 
 def init_evidence_from_profile(profile_path: str = 'config/user_profile.json',
-                                db_path: str = None) -> int:
+                                db_path: str = None,
+                                user_id: int = 1) -> int:
     """从 user_profile.json 初始化证据库，返回新增条目数"""
     config = load_config()
     db_path = db_path or config['storage']['db_path']
@@ -26,7 +27,7 @@ def init_evidence_from_profile(profile_path: str = 'config/user_profile.json',
         return 0
 
     # 检查是否已初始化（避免重复）
-    existing = db.get_evidence_list(user_id=1)
+    existing = db.get_evidence_list(user_id=user_id)
     if existing:
         print(f"证据库已有 {len(existing)} 条记录，跳过初始化")
         return 0
@@ -38,7 +39,7 @@ def init_evidence_from_profile(profile_path: str = 'config/user_profile.json',
     skills = profile.get("skills", [])
     for skill in skills:
         db.add_evidence({
-            "user_id": 1,
+            "user_id": user_id,
             "type": "skill",
             "title": skill,
             "content": f"具备 {skill} 技能",
@@ -56,7 +57,7 @@ def init_evidence_from_profile(profile_path: str = 'config/user_profile.json',
         if achievements:
             content += "\n成果:\n" + "\n".join(f"- {a}" for a in achievements)
         db.add_evidence({
-            "user_id": 1,
+            "user_id": user_id,
             "type": "project",
             "title": exp.get("title", ""),
             "content": content,
@@ -68,7 +69,7 @@ def init_evidence_from_profile(profile_path: str = 'config/user_profile.json',
 
     # 3. 教育经历
     db.add_evidence({
-        "user_id": 1,
+        "user_id": user_id,
         "type": "education",
         "title": f"{basic.get('school', '')} {basic.get('education', '')}",
         "content": (

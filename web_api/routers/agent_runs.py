@@ -6,9 +6,11 @@ import os
 import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from src.storage.database import DatabaseManager
 from src.helpers import load_config
+from src.auth.dependencies import get_current_user
+from src.storage.models import User
 
 router = APIRouter()
 
@@ -51,18 +53,18 @@ def _step_to_dict(step) -> dict:
 
 
 @router.get("")
-async def list_agent_runs(job_id: int = None, limit: int = 20):
+async def list_agent_runs(job_id: int = None, limit: int = 20, current_user: User = Depends(get_current_user)):
     """获取 Agent 运行列表"""
     db = get_db()
     try:
-        runs = db.get_agent_runs(job_id=job_id, limit=limit)
+        runs = db.get_agent_runs(job_id=job_id, limit=limit, user_id=current_user.id)
         return {"success": True, "data": [_run_to_dict(r) for r in runs]}
     finally:
         db.close()
 
 
 @router.get("/{run_id}")
-async def get_agent_run(run_id: int):
+async def get_agent_run(run_id: int, current_user: User = Depends(get_current_user)):
     """获取单次 Agent 运行详情"""
     db = get_db()
     try:
@@ -77,7 +79,7 @@ async def get_agent_run(run_id: int):
 
 
 @router.get("/{run_id}/steps")
-async def get_agent_run_steps(run_id: int):
+async def get_agent_run_steps(run_id: int, current_user: User = Depends(get_current_user)):
     """获取 Agent 运行的所有步骤"""
     db = get_db()
     try:

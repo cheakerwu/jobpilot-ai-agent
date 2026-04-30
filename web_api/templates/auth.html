@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - JobPilot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f8fafc; }
+        .tab-active { color: #2563eb; border-bottom: 2px solid #2563eb; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center">
+    <div class="w-full max-w-md mx-4">
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold">J</div>
+                <span class="text-2xl font-bold">JobPilot</span>
+            </div>
+            <p class="text-slate-500 text-sm">求职 CRM + Agent Copilot</p>
+        </div>
+
+        <div class="bg-white rounded-lg border border-slate-200 p-6">
+            <div class="flex mb-6">
+                <button id="tab-login" class="flex-1 py-2 text-center font-semibold tab-active" onclick="switchTab('login')">登录</button>
+                <button id="tab-register" class="flex-1 py-2 text-center font-semibold text-slate-400" onclick="switchTab('register')">注册</button>
+            </div>
+
+            <form id="form-login" onsubmit="handleLogin(event)">
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-slate-600 mb-1">用户名</label>
+                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" name="username" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-slate-600 mb-1">密码</label>
+                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" type="password" name="password" required>
+                </div>
+                <div id="login-error" class="text-red-500 text-sm mb-3 hidden"></div>
+                <button class="w-full bg-blue-600 text-white py-2 rounded-md font-semibold hover:bg-blue-700" type="submit">登录</button>
+            </form>
+
+            <form id="form-register" class="hidden" onsubmit="handleRegister(event)">
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-slate-600 mb-1">用户名</label>
+                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" name="username" required minlength="2" maxlength="50">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-slate-600 mb-1">邮箱</label>
+                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" type="email" name="email" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-slate-600 mb-1">密码</label>
+                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" type="password" name="password" required minlength="6">
+                </div>
+                <div id="register-error" class="text-red-500 text-sm mb-3 hidden"></div>
+                <button class="w-full bg-blue-600 text-white py-2 rounded-md font-semibold hover:bg-blue-700" type="submit">注册</button>
+            </form>
+        </div>
+
+        <p class="text-center text-sm text-slate-400 mt-4"><a href="/" class="text-blue-600 hover:underline">返回首页</a></p>
+    </div>
+
+    <script>
+    const API = "/api/auth";
+
+    function switchTab(tab) {
+        document.getElementById("form-login").classList.toggle("hidden", tab !== "login");
+        document.getElementById("form-register").classList.toggle("hidden", tab !== "register");
+        document.getElementById("tab-login").classList.toggle("tab-active", tab === "login");
+        document.getElementById("tab-login").classList.toggle("text-slate-400", tab !== "login");
+        document.getElementById("tab-register").classList.toggle("tab-active", tab === "register");
+        document.getElementById("tab-register").classList.toggle("text-slate-400", tab !== "register");
+        document.getElementById("login-error").classList.add("hidden");
+        document.getElementById("register-error").classList.add("hidden");
+    }
+
+    function showError(id, msg) {
+        const el = document.getElementById(id);
+        el.textContent = msg;
+        el.classList.remove("hidden");
+    }
+
+    async function handleLogin(e) {
+        e.preventDefault();
+        const form = e.target;
+        const data = { username: form.username.value, password: form.password.value };
+        try {
+            const res = await fetch(API + "/login", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data) });
+            const json = await res.json();
+            if (!res.ok) { showError("login-error", json.detail || "登录失败"); return; }
+            localStorage.setItem("token", json.data.token);
+            localStorage.setItem("user", JSON.stringify(json.data.user));
+            window.location.href = "/app";
+        } catch { showError("login-error", "网络错误"); }
+    }
+
+    async function handleRegister(e) {
+        e.preventDefault();
+        const form = e.target;
+        const data = { username: form.username.value, email: form.email.value, password: form.password.value };
+        try {
+            const res = await fetch(API + "/register", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data) });
+            const json = await res.json();
+            if (!res.ok) { showError("register-error", json.detail || "注册失败"); return; }
+            localStorage.setItem("token", json.data.token);
+            localStorage.setItem("user", JSON.stringify(json.data.user));
+            window.location.href = "/app";
+        } catch { showError("register-error", "网络错误"); }
+    }
+
+    // 已登录则跳转
+    if (localStorage.getItem("token")) window.location.href = "/app";
+    </script>
+</body>
+</html>

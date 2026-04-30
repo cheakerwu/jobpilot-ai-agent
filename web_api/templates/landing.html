@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobPilot - 求职 CRM + Agent Copilot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+    </style>
+</head>
+<body class="bg-white text-slate-800">
+    <!-- Hero -->
+    <div class="min-h-screen flex flex-col">
+        <header class="flex items-center justify-between px-8 py-5">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">J</div>
+                <span class="text-lg font-bold">JobPilot</span>
+            </div>
+            <a href="/login" class="bg-blue-600 text-white px-5 py-2 rounded-md text-sm font-semibold hover:bg-blue-700">登录 / 注册</a>
+        </header>
+
+        <main class="flex-1 flex items-center justify-center px-8 pb-20">
+            <div class="max-w-3xl text-center">
+                <h1 class="text-5xl font-bold mb-6">你的 AI 求职助手</h1>
+                <p class="text-xl text-slate-500 mb-10">JobPilot 将岗位分析、简历定制、求职信生成、面试准备整合为一个智能工作流，让你专注在最重要的事情上。</p>
+                <a href="/login" class="inline-block bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-700">开始使用</a>
+            </div>
+        </main>
+    </div>
+
+    <!-- Features -->
+    <div class="bg-slate-50 py-20 px-8">
+        <div class="max-w-5xl mx-auto">
+            <h2 class="text-3xl font-bold text-center mb-12">核心功能</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="bg-white rounded-lg p-6 border border-slate-200">
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 text-xl mb-4">1</div>
+                    <h3 class="font-bold text-lg mb-2">岗位导入</h3>
+                    <p class="text-slate-500 text-sm">手动粘贴 JD、CSV 批量导入、PDF 识别，多种方式快速建立岗位池。</p>
+                </div>
+                <div class="bg-white rounded-lg p-6 border border-slate-200">
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600 text-xl mb-4">2</div>
+                    <h3 class="font-bold text-lg mb-2">智能分析</h3>
+                    <p class="text-slate-500 text-sm">规则引擎 + LLM 双重分析，匹配度评分、风险提示、行动建议一目了然。</p>
+                </div>
+                <div class="bg-white rounded-lg p-6 border border-slate-200">
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 text-xl mb-4">3</div>
+                    <h3 class="font-bold text-lg mb-2">定制简历</h3>
+                    <p class="text-slate-500 text-sm">基于证据库生成针对性简历，每个论点可追溯，杜绝编造。</p>
+                </div>
+                <div class="bg-white rounded-lg p-6 border border-slate-200">
+                    <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 text-xl mb-4">4</div>
+                    <h3 class="font-bold text-lg mb-2">求职信生成</h3>
+                    <p class="text-slate-500 text-sm">一键生成专业求职信，自动关联岗位要求和个人优势。</p>
+                </div>
+                <div class="bg-white rounded-lg p-6 border border-slate-200">
+                    <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center text-red-600 text-xl mb-4">5</div>
+                    <h3 class="font-bold text-lg mb-2">面试准备</h3>
+                    <p class="text-slate-500 text-sm">基于 JD 和你的经历生成面试问题和参考回答，覆盖技术与行为维度。</p>
+                </div>
+                <div class="bg-white rounded-lg p-6 border border-slate-200">
+                    <div class="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center text-teal-600 text-xl mb-4">6</div>
+                    <h3 class="font-bold text-lg mb-2">进度看板</h3>
+                    <p class="text-slate-500 text-sm">拖拽式看板管理求职进度，薪资分析、数据看板助你决策。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tech Stack -->
+    <div class="py-16 px-8">
+        <div class="max-w-3xl mx-auto text-center">
+            <h2 class="text-2xl font-bold mb-6">技术栈</h2>
+            <div class="flex flex-wrap justify-center gap-3">
+                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">FastAPI</span>
+                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">SQLAlchemy</span>
+                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">SQLite</span>
+                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">LLM Agent</span>
+                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">JWT Auth</span>
+                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">Docker</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="bg-blue-600 py-16 px-8 text-center">
+        <h2 class="text-3xl font-bold text-white mb-4">准备好提升求职效率了吗？</h2>
+        <p class="text-blue-100 mb-8">免费注册，开始你的智能求职之旅。</p>
+        <a href="/login" class="inline-block bg-white text-blue-600 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-50">免费注册</a>
+    </div>
+
+    <footer class="text-center py-6 text-sm text-slate-400">
+        JobPilot &copy; 2026
+    </footer>
+</body>
+</html>

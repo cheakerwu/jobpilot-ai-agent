@@ -7,8 +7,9 @@ from datetime import datetime
 from sqlalchemy import create_engine, desc, text
 from sqlalchemy.orm import sessionmaker
 from .models import (
-    Base, Job, Application, EvidenceItem, JobImportBatch,
+    Base, User, Job, Application, EvidenceItem, JobImportBatch,
     JobAnalysis, ResumeVersion, AgentRun, AgentStep,
+    CoverLetter, InterviewPrep,
 )
 
 
@@ -58,6 +59,28 @@ class DatabaseManager:
                     if column not in existing_columns:
                         conn.execute(text(ddl))
 
+    # ── Users ─────────────────────────────────────────────────────────────────
+
+    def create_user(self, username: str, email: str, password_hash: str) -> User | None:
+        try:
+            user = User(username=username, email=email, password_hash=password_hash)
+            self.session.add(user)
+            self.session.commit()
+            return user
+        except Exception as e:
+            self.session.rollback()
+            print(f"创建用户失败: {e}")
+            return None
+
+    def get_user_by_username(self, username: str) -> User | None:
+        return self.session.query(User).filter(User.username == username).first()
+
+    def get_user_by_email(self, email: str) -> User | None:
+        return self.session.query(User).filter(User.email == email).first()
+
+    def get_user_by_id(self, user_id: int) -> User | None:
+        return self.session.query(User).filter(User.id == user_id).first()
+
     # ── Jobs ──────────────────────────────────────────────────────────────────
 
     def add_job(self, job_data: dict) -> Job | None:
@@ -77,8 +100,10 @@ class DatabaseManager:
     def get_job_by_platform_id(self, platform_id: str) -> Job | None:
         return self.session.query(Job).filter(Job.job_id == platform_id).first()
 
-    def get_all_jobs(self, status: str | None = None, limit: int | None = None) -> list[Job]:
+    def get_all_jobs(self, status: str | None = None, limit: int | None = None, user_id: int | None = None) -> list[Job]:
         query = self.session.query(Job)
+        if user_id is not None:
+            query = query.filter(Job.user_id == user_id)
         if status:
             query = query.filter(Job.status == status)
         query = query.order_by(desc(Job.created_at))
@@ -103,8 +128,11 @@ class DatabaseManager:
     def get_jobs_paginated(
         self, page: int = 1, per_page: int = 20,
         status: str | None = None, city: str | None = None,
+        user_id: int | None = None,
     ) -> list[Job]:
         query = self.session.query(Job)
+        if user_id is not None:
+            query = query.filter(Job.user_id == user_id)
         if status:
             query = query.filter(Job.status == status)
         if city:
@@ -113,23 +141,28 @@ class DatabaseManager:
         offset = (page - 1) * per_page
         return query.offset(offset).limit(per_page).all()
 
-    def get_jobs_count(self, status: str | None = None, city: str | None = None) -> int:
+    def get_jobs_count(self, status: str | None = None, city: str | None = None, user_id: int | None = None) -> int:
         query = self.session.query(Job)
+        if user_id is not None:
+            query = query.filter(Job.user_id == user_id)
         if status:
             query = query.filter(Job.status == status)
         if city:
             query = query.filter(Job.city == city)
         return query.count()
 
-    def get_statistics(self) -> dict:
+    def get_statistics(self, user_id: int | None = None) -> dict:
+        q = self.session.query(Job)
+        if user_id is not None:
+            q = q.filter(Job.user_id == user_id)
         return {
-            'total': self.session.query(Job).count(),
-            'new': self.session.query(Job).filter(Job.status == 'new').count(),
-            'analyzed': self.session.query(Job).filter(Job.status == 'analyzed').count(),
-            'recommended': self.session.query(Job).filter(Job.status == 'recommended').count(),
-            'applied': self.session.query(Job).filter(Job.status == 'applied').count(),
-            'interviewing': self.session.query(Job).filter(Job.status == 'interviewing').count(),
-            'offer': self.session.query(Job).filter(Job.status == 'offer').count(),
+            'total': q.count(),
+            'new': q.filter(Job.status == 'new').count(),
+            'analyzed': q.filter(Job.status == 'analyzed').count(),
+            'recommended': q.filter(Job.status == 'recommended').count(),
+            'applied': q.filter(Job.status == 'applied').count(),
+            'interviewing': q.filter(Job.status == 'interviewing').count(),
+            'offer': q.filter(Job.status == 'offer').count(),
         }
 
     # ── Applications ─────────────────────────────────────────────────────────
@@ -148,8 +181,11 @@ class DatabaseManager:
             print(f"添加投递记录失败: {e}")
             return None
 
-    def get_applications(self, limit: int | None = None) -> list[Application]:
-        query = self.session.query(Application).order_by(desc(Application.applied_at))
+    def get_applications(self, limit: int | None = None, user_id: int | None = None) -> list[Application]:
+        query = self.session.query(Application)
+        if user_id is not None:
+            query = query.filter(Application.user_id == user_id)
+        query = query.order_by(desc(Application.applied_at))
         if limit:
             query = query.limit(limit)
         return query.all()
@@ -307,6 +343,61 @@ class DatabaseManager:
     def get_resume_version_by_id(self, version_id: int) -> ResumeVersion | None:
         return self.session.query(ResumeVersion).filter(ResumeVersion.id == version_id).first()
 
+    # ── Cover Letters ───────────────────────────────────────────────────────
+
+    def save_cover_letter(self, data: dict) -> CoverLetter | None:
+        try:
+            for field in ('evidence_links_json', 'highlights_json'):
+                if field in data and not isinstance(data[field], str):
+                    data[field] = json.dumps(data[field], ensure_ascii=False)
+            cl = CoverLetter(**data)
+            self.session.add(cl)
+            self.session.commit()
+            return cl
+        except Exception as e:
+            self.session.rollback()
+            print(f"保存求职信失败: {e}")
+            return None
+
+    def get_cover_letters_by_job(self, job_id: int) -> list[CoverLetter]:
+        return (
+            self.session.query(CoverLetter)
+            .filter(CoverLetter.job_id == job_id)
+            .order_by(desc(CoverLetter.created_at))
+            .all()
+        )
+
+    def get_cover_letter_by_id(self, cl_id: int) -> CoverLetter | None:
+        return self.session.query(CoverLetter).filter(CoverLetter.id == cl_id).first()
+
+    # ── Interview Preps ─────────────────────────────────────────────────────
+
+    def save_interview_prep(self, data: dict) -> InterviewPrep | None:
+        try:
+            for field in ('questions_json', 'company_insights_json',
+                           'preparation_tips_json', 'risk_areas_json'):
+                if field in data and not isinstance(data[field], str):
+                    data[field] = json.dumps(data[field], ensure_ascii=False)
+            prep = InterviewPrep(**data)
+            self.session.add(prep)
+            self.session.commit()
+            return prep
+        except Exception as e:
+            self.session.rollback()
+            print(f"保存面试准备失败: {e}")
+            return None
+
+    def get_interview_preps_by_job(self, job_id: int) -> list[InterviewPrep]:
+        return (
+            self.session.query(InterviewPrep)
+            .filter(InterviewPrep.job_id == job_id)
+            .order_by(desc(InterviewPrep.created_at))
+            .all()
+        )
+
+    def get_interview_prep_by_id(self, prep_id: int) -> InterviewPrep | None:
+        return self.session.query(InterviewPrep).filter(InterviewPrep.id == prep_id).first()
+
     # ── Agent Runs ────────────────────────────────────────────────────────────
 
     def create_agent_run(self, data: dict) -> AgentRun | None:
@@ -340,8 +431,10 @@ class DatabaseManager:
     def get_agent_run(self, run_id: int) -> AgentRun | None:
         return self.session.query(AgentRun).filter(AgentRun.id == run_id).first()
 
-    def get_agent_runs(self, job_id: int | None = None, limit: int = 20) -> list[AgentRun]:
+    def get_agent_runs(self, job_id: int | None = None, limit: int = 20, user_id: int | None = None) -> list[AgentRun]:
         query = self.session.query(AgentRun)
+        if user_id is not None:
+            query = query.filter(AgentRun.user_id == user_id)
         if job_id:
             query = query.filter(AgentRun.job_id == job_id)
         return query.order_by(desc(AgentRun.started_at)).limit(limit).all()

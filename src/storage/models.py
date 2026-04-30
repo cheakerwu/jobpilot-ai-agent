@@ -1,11 +1,26 @@
 """
 数据模型定义
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, Boolean, ForeignKey, Index
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 
 Base = declarative_base()
+
+
+class User(Base):
+    """用户表"""
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    email = Column(String(120), unique=True, nullable=False, index=True)
+    password_hash = Column(String(128), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    def __repr__(self):
+        return f"<User(id={self.id}, username='{self.username}')>"
 
 
 class Job(Base):
@@ -160,6 +175,52 @@ class ResumeVersion(Base):
 
     def __repr__(self):
         return f"<ResumeVersion(id={self.id}, job_id={self.job_id})>"
+
+
+class CoverLetter(Base):
+    """求职信"""
+    __tablename__ = 'cover_letters'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, index=True, default=1)
+    job_id = Column(Integer, ForeignKey('jobs.id'), nullable=False, index=True)
+    analysis_id = Column(Integer, ForeignKey('job_analyses.id'), nullable=True)
+    title = Column(String(200))
+    content = Column(Text, nullable=False)
+    format = Column(String(20), default='markdown')
+    evidence_links_json = Column(Text)    # JSON: [{evidence_id, bullet_text}]
+    highlights_json = Column(Text)        # JSON: [str]
+    tone = Column(String(50), default='professional')
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    job = relationship("Job")
+    analysis = relationship("JobAnalysis")
+
+    def __repr__(self):
+        return f"<CoverLetter(id={self.id}, job_id={self.job_id})>"
+
+
+class InterviewPrep(Base):
+    """面试准备材料"""
+    __tablename__ = 'interview_preps'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, index=True, default=1)
+    job_id = Column(Integer, ForeignKey('jobs.id'), nullable=False, index=True)
+    analysis_id = Column(Integer, ForeignKey('job_analyses.id'), nullable=True)
+    title = Column(String(200))
+    questions_json = Column(Text)            # JSON: [{category, question, answer, evidence_refs}]
+    company_insights_json = Column(Text)     # JSON: {culture, tech_stack, interview_process}
+    preparation_tips_json = Column(Text)     # JSON: [str]
+    risk_areas_json = Column(Text)           # JSON: [{area, suggestion}]
+    format = Column(String(20), default='markdown')
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    job = relationship("Job")
+    analysis = relationship("JobAnalysis")
+
+    def __repr__(self):
+        return f"<InterviewPrep(id={self.id}, job_id={self.job_id})>"
 
 
 class AgentRun(Base):

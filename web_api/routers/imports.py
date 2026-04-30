@@ -6,7 +6,7 @@ import os
 import hashlib
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from pydantic import BaseModel
 from typing import Optional
 
@@ -15,6 +15,8 @@ from src.sources.manual_source import ManualJobSource
 from src.sources.csv_source import CsvJobSource
 from src.helpers import load_config
 from src.parsers.pdf import extract_text_from_pdf, infer_job_from_jd_text
+from src.auth.dependencies import get_current_user
+from src.storage.models import User
 
 router = APIRouter()
 
@@ -35,12 +37,13 @@ class ManualImportRequest(BaseModel):
 
 
 @router.post("/manual")
-async def import_manual(req: ManualImportRequest):
+async def import_manual(req: ManualImportRequest, current_user: User = Depends(get_current_user)):
     """手动粘贴 JD 导入单个岗位"""
     db = get_db()
     try:
         source = ManualJobSource()
         job_data = source.normalize(req.model_dump())
+        job_data["user_id"] = current_user.id
 
         if not job_data["title"] or not job_data["company"]:
             raise HTTPException(status_code=400, detail="职位名称和公司名称必填")
@@ -56,6 +59,7 @@ async def import_manual(req: ManualImportRequest):
 
         # 记录批次
         db.create_import_batch({
+            "user_id": current_user.id,
             "source": "manual",
             "total_count": 1,
             "success_count": 1,
@@ -72,7 +76,7 @@ async def import_manual(req: ManualImportRequest):
 
 
 @router.post("/csv")
-async def import_csv(file: UploadFile = File(...)):
+async def import_csv(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     """CSV / Excel 批量导入岗位"""
     db = get_db()
     try:
@@ -89,6 +93,7 @@ async def import_csv(file: UploadFile = File(...)):
 
         for raw in source.fetch({"file_content": content, "filename": filename}):
             job_data = source.normalize(raw)
+            job_data["user_id"] = current_user.id
             if not job_data.get("title") or not job_data.get("company"):
                 failed_count += 1
                 continue
@@ -106,6 +111,7 @@ async def import_csv(file: UploadFile = File(...)):
                 failed_count += 1
 
         batch = db.create_import_batch({
+            "user_id": current_user.id,
             "source": "csv",
             "filename": filename,
             "total_count": success_count + failed_count + skipped_count,
@@ -134,6 +140,7 @@ async def import_pdf_jd(
     city: str = Form(""),
     salary: str = Form(""),
     url: str = Form(""),
+    current_user: User = Depends(get_current_user),
 ):
     """上传 PDF JD，自动识别并导入岗位池。"""
     db = get_db()
@@ -167,6 +174,7 @@ async def import_pdf_jd(
         job_data = source.normalize(raw_job)
         job_data["source"] = "pdf_jd"
         job_data["platform"] = "pdf_jd"
+        job_data["user_id"] = current_user.id
 
         if not job_data["title"]:
             raise HTTPException(status_code=400, detail="未识别到职位名称")
@@ -186,6 +194,7 @@ async def import_pdf_jd(
             raise HTTPException(status_code=500, detail="保存岗位失败")
 
         batch = db.create_import_batch({
+            "user_id": current_user.id,
             "source": "pdf_jd",
             "filename": filename,
             "total_count": 1,
@@ -211,7 +220,7 @@ async def import_pdf_jd(
 
 
 @router.get("/{batch_id}")
-async def get_batch(batch_id: int):
+async def get_batch(batch_id: int, current_user: User = Depends(get_current_user)):
     """获取导入批次详情"""
     db = get_db()
     try:

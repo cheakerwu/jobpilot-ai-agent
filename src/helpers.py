@@ -10,29 +10,22 @@ from datetime import datetime
 
 def setup_logger(name='job_agent', log_dir='logs', level=logging.INFO):
     """设置日志系统"""
-    # 创建日志目录
     os.makedirs(log_dir, exist_ok=True)
 
-    # 日志文件路径
     log_file = os.path.join(log_dir, f'job_agent_{datetime.now():%Y%m%d}.log')
 
-    # 创建logger
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
-    # 避免重复添加handler
     if logger.handlers:
         return logger
 
-    # 文件handler
     file_handler = logging.FileHandler(log_file, encoding='utf-8')
     file_handler.setLevel(level)
 
-    # 控制台handler
     console_handler = logging.StreamHandler()
     console_handler.setLevel(level)
 
-    # 格式化
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
@@ -40,23 +33,44 @@ def setup_logger(name='job_agent', log_dir='logs', level=logging.INFO):
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
 
-    # 添加handler
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
     return logger
 
 
-def load_config(config_path='config/config.yaml'):
-    """加载配置文件"""
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+_DEFAULT_CONFIG = {
+    "storage": {"db_path": "data/jobs.db"},
+    "resume": {"provider": "qwen", "model": "qwen-plus"},
+    "server": {"allowed_origins": ["*"]},
+}
+
+
+def load_config(config_path=None):
+    """加载配置文件，支持环境变量覆盖和默认值降级"""
+    if config_path is None:
+        config_path = os.environ.get("JOBPILOT_CONFIG", "config/config.yaml")
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+            if config:
+                return config
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+    return dict(_DEFAULT_CONFIG)
 
 
 def load_user_profile(profile_path='config/user_profile.json'):
     """加载用户配置"""
-    with open(profile_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    try:
+        with open(profile_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"basic_info": {}, "skills": [], "experiences": [], "filter_preferences": {}}
 
 
 def format_job_info(job, show_detail=False):
