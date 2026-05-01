@@ -3,95 +3,253 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JobPilot - 求职 CRM + Agent Copilot</title>
+    <title>JobPilot - AI 求职助手</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Microsoft YaHei"', '"PingFang SC"', 'system-ui', 'sans-serif'] },
+                    animation: {
+                        'fade-up': 'fadeUp 0.6s ease-out forwards',
+                        'fade-in': 'fadeIn 0.8s ease-out forwards',
+                        'float': 'float 6s ease-in-out infinite',
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+        .animate-delay-100 { animation-delay: 0.1s; }
+        .animate-delay-200 { animation-delay: 0.2s; }
+        .animate-delay-300 { animation-delay: 0.3s; }
+        .animate-delay-400 { animation-delay: 0.4s; }
+        .animate-delay-500 { animation-delay: 0.5s; }
+        .animate-delay-600 { animation-delay: 0.6s; }
+        .gradient-hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .gradient-text { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .feature-card { transition: all 0.3s ease; }
+        .feature-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px -12px rgba(0,0,0,0.1); }
+        .glow { box-shadow: 0 0 60px rgba(102, 126, 234, 0.3); }
+        .glass { background: rgba(255,255,255,0.1); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.2); }
+        html { scroll-behavior: smooth; }
     </style>
 </head>
-<body class="bg-white text-slate-800">
-    <!-- Hero -->
-    <div class="min-h-screen flex flex-col">
-        <header class="flex items-center justify-between px-8 py-5">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">J</div>
+<body class="bg-white text-slate-800 font-sans antialiased">
+    <!-- Nav -->
+    <header class="fixed top-0 w-full z-50 transition-all duration-300" id="nav">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                    <iconify-icon icon="solar:case-minimalistic-bold-duotone" class="text-white" width="18"></iconify-icon>
+                </div>
                 <span class="text-lg font-bold">JobPilot</span>
             </div>
-            <a href="/login" class="bg-blue-600 text-white px-5 py-2 rounded-md text-sm font-semibold hover:bg-blue-700">登录 / 注册</a>
-        </header>
+            <nav class="hidden md:flex items-center gap-8 text-sm text-slate-600">
+                <a href="#features" class="hover:text-indigo-600 transition-colors">功能</a>
+                <a href="#workflow" class="hover:text-indigo-600 transition-colors">工作流</a>
+                <a href="#tech" class="hover:text-indigo-600 transition-colors">技术栈</a>
+            </nav>
+            <a href="/login" class="bg-slate-900 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-colors">登录 / 注册</a>
+        </div>
+    </header>
 
-        <main class="flex-1 flex items-center justify-center px-8 pb-20">
-            <div class="max-w-3xl text-center">
-                <h1 class="text-5xl font-bold mb-6">你的 AI 求职助手</h1>
-                <p class="text-xl text-slate-500 mb-10">JobPilot 将岗位分析、简历定制、求职信生成、面试准备整合为一个智能工作流，让你专注在最重要的事情上。</p>
-                <a href="/login" class="inline-block bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-700">开始使用</a>
+    <!-- Hero -->
+    <section class="relative min-h-screen flex items-center justify-center overflow-hidden">
+        <div class="absolute inset-0 gradient-hero opacity-[0.03]"></div>
+        <div class="absolute top-20 right-10 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float"></div>
+        <div class="absolute bottom-20 left-10 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float animate-delay-300"></div>
+
+        <div class="relative max-w-4xl mx-auto px-6 text-center pt-20">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-50 rounded-full text-indigo-600 text-sm font-medium mb-8 animate-fade-up">
+                <iconify-icon icon="solar:star-bold" width="14"></iconify-icon>
+                AI 驱动的智能求职平台
             </div>
-        </main>
-    </div>
+            <h1 class="text-5xl md:text-7xl font-bold leading-tight mb-6 animate-fade-up animate-delay-100">
+                让求职效率<br><span class="gradient-text">提升 10 倍</span>
+            </h1>
+            <p class="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto mb-10 leading-relaxed animate-fade-up animate-delay-200">
+                JobPilot 将岗位分析、简历定制、求职信生成、面试准备整合为一个智能工作流。<br>不再手动对比 JD，不再重复修改简历。
+            </p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-up animate-delay-300">
+                <a href="/login" class="inline-flex items-center gap-2 bg-slate-900 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 transition-all hover:shadow-lg hover:shadow-slate-900/20">
+                    免费开始使用
+                    <iconify-icon icon="solar:arrow-right-bold" width="18"></iconify-icon>
+                </a>
+                <a href="#features" class="inline-flex items-center gap-2 text-slate-600 px-6 py-3.5 rounded-xl text-base font-medium hover:text-slate-900 transition-colors">
+                    了解更多
+                    <iconify-icon icon="solar:alt-arrow-down-bold" width="16"></iconify-icon>
+                </a>
+            </div>
+
+            <!-- Stats -->
+            <div class="flex items-center justify-center gap-12 mt-16 animate-fade-up animate-delay-400">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-slate-900">12+</div>
+                    <div class="text-sm text-slate-500">API 模块</div>
+                </div>
+                <div class="w-px h-8 bg-slate-200"></div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-slate-900">AI</div>
+                    <div class="text-sm text-slate-500">智能分析</div>
+                </div>
+                <div class="w-px h-8 bg-slate-200"></div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-slate-900">6 步</div>
+                    <div class="text-sm text-slate-500">完整工作流</div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <!-- Features -->
-    <div class="bg-slate-50 py-20 px-8">
-        <div class="max-w-5xl mx-auto">
-            <h2 class="text-3xl font-bold text-center mb-12">核心功能</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div class="bg-white rounded-lg p-6 border border-slate-200">
-                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 text-xl mb-4">1</div>
-                    <h3 class="font-bold text-lg mb-2">岗位导入</h3>
-                    <p class="text-slate-500 text-sm">手动粘贴 JD、CSV 批量导入、PDF 识别，多种方式快速建立岗位池。</p>
+    <section id="features" class="py-24 px-6 bg-slate-50">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-16">
+                <div class="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 rounded-full text-indigo-600 text-xs font-semibold mb-4">核心功能</div>
+                <h2 class="text-3xl md:text-4xl font-bold mb-4">你需要的一切，都在这里</h2>
+                <p class="text-slate-500 max-w-xl mx-auto">从岗位导入到面试准备，JobPilot 覆盖求职全流程，让你专注于最重要的决策。</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div class="feature-card bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center mb-4">
+                        <iconify-icon icon="solar:import-bold-duotone" class="text-blue-600" width="22"></iconify-icon>
+                    </div>
+                    <h3 class="font-bold text-base mb-2">多源岗位导入</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">手动粘贴 JD、CSV 批量导入、PDF 识别，三种方式快速建立岗位池。</p>
                 </div>
-                <div class="bg-white rounded-lg p-6 border border-slate-200">
-                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600 text-xl mb-4">2</div>
-                    <h3 class="font-bold text-lg mb-2">智能分析</h3>
-                    <p class="text-slate-500 text-sm">规则引擎 + LLM 双重分析，匹配度评分、风险提示、行动建议一目了然。</p>
+                <div class="feature-card bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="w-11 h-11 rounded-xl bg-purple-50 flex items-center justify-center mb-4">
+                        <iconify-icon icon="solar:magic-stick-3-bold-duotone" class="text-purple-600" width="22"></iconify-icon>
+                    </div>
+                    <h3 class="font-bold text-base mb-2">AI 智能分析</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">规则引擎 + LLM 双重分析，匹配度评分、风险提示、行动建议一目了然。</p>
                 </div>
-                <div class="bg-white rounded-lg p-6 border border-slate-200">
-                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 text-xl mb-4">3</div>
-                    <h3 class="font-bold text-lg mb-2">定制简历</h3>
-                    <p class="text-slate-500 text-sm">基于证据库生成针对性简历，每个论点可追溯，杜绝编造。</p>
+                <div class="feature-card bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center mb-4">
+                        <iconify-icon icon="solar:document-text-bold-duotone" class="text-emerald-600" width="22"></iconify-icon>
+                    </div>
+                    <h3 class="font-bold text-base mb-2">定制简历生成</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">基于证据库生成针对性简历，每个论点可追溯，杜绝编造。</p>
                 </div>
-                <div class="bg-white rounded-lg p-6 border border-slate-200">
-                    <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 text-xl mb-4">4</div>
-                    <h3 class="font-bold text-lg mb-2">求职信生成</h3>
-                    <p class="text-slate-500 text-sm">一键生成专业求职信，自动关联岗位要求和个人优势。</p>
+                <div class="feature-card bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center mb-4">
+                        <iconify-icon icon="solar:letter-bold-duotone" class="text-amber-600" width="22"></iconify-icon>
+                    </div>
+                    <h3 class="font-bold text-base mb-2">Cover Letter</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">一键生成专业求职信，自动关联岗位要求和个人优势。</p>
                 </div>
-                <div class="bg-white rounded-lg p-6 border border-slate-200">
-                    <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center text-red-600 text-xl mb-4">5</div>
-                    <h3 class="font-bold text-lg mb-2">面试准备</h3>
-                    <p class="text-slate-500 text-sm">基于 JD 和你的经历生成面试问题和参考回答，覆盖技术与行为维度。</p>
+                <div class="feature-card bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="w-11 h-11 rounded-xl bg-rose-50 flex items-center justify-center mb-4">
+                        <iconify-icon icon="solar:notebook-bold-duotone" class="text-rose-600" width="22"></iconify-icon>
+                    </div>
+                    <h3 class="font-bold text-base mb-2">面试准备</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">基于 JD 和你的经历生成面试问题和参考回答，覆盖技术与行为维度。</p>
                 </div>
-                <div class="bg-white rounded-lg p-6 border border-slate-200">
-                    <div class="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center text-teal-600 text-xl mb-4">6</div>
-                    <h3 class="font-bold text-lg mb-2">进度看板</h3>
-                    <p class="text-slate-500 text-sm">拖拽式看板管理求职进度，薪资分析、数据看板助你决策。</p>
+                <div class="feature-card bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="w-11 h-11 rounded-xl bg-cyan-50 flex items-center justify-center mb-4">
+                        <iconify-icon icon="solar:chart-2-bold-duotone" class="text-cyan-600" width="22"></iconify-icon>
+                    </div>
+                    <h3 class="font-bold text-base mb-2">数据看板</h3>
+                    <p class="text-sm text-slate-500 leading-relaxed">拖拽式看板管理求职进度，薪资分析、数据可视化助你决策。</p>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Tech Stack -->
-    <div class="py-16 px-8">
-        <div class="max-w-3xl mx-auto text-center">
-            <h2 class="text-2xl font-bold mb-6">技术栈</h2>
-            <div class="flex flex-wrap justify-center gap-3">
-                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">FastAPI</span>
-                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">SQLAlchemy</span>
-                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">SQLite</span>
-                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">LLM Agent</span>
-                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">JWT Auth</span>
-                <span class="bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-sm">Docker</span>
+    <!-- Workflow -->
+    <section id="workflow" class="py-24 px-6">
+        <div class="max-w-5xl mx-auto">
+            <div class="text-center mb-16">
+                <div class="inline-flex items-center gap-2 px-3 py-1 bg-purple-50 rounded-full text-purple-600 text-xs font-semibold mb-4">工作流</div>
+                <h2 class="text-3xl md:text-4xl font-bold mb-4">6 步完成求职闭环</h2>
+                <p class="text-slate-500 max-w-xl mx-auto">从发现岗位到拿到 Offer，JobPilot 让每一步都有 AI 加持。</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="relative bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="absolute -top-3 -left-3 w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">1</div>
+                    <h3 class="font-bold text-base mb-2 mt-1">导入岗位</h3>
+                    <p class="text-sm text-slate-500">粘贴 JD 文本、上传 CSV 或 PDF，快速建立你的岗位池。</p>
+                </div>
+                <div class="relative bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="absolute -top-3 -left-3 w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">2</div>
+                    <h3 class="font-bold text-base mb-2 mt-1">AI 分析匹配</h3>
+                    <p class="text-sm text-slate-500">自动对比 JD 与你的证据库，给出匹配分和风险提示。</p>
+                </div>
+                <div class="relative bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="absolute -top-3 -left-3 w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">3</div>
+                    <h3 class="font-bold text-base mb-2 mt-1">生成简历</h3>
+                    <p class="text-sm text-slate-500">基于证据库自动生成针对性简历，每句话都有据可查。</p>
+                </div>
+                <div class="relative bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="absolute -top-3 -left-3 w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">4</div>
+                    <h3 class="font-bold text-base mb-2 mt-1">撰写求职信</h3>
+                    <p class="text-sm text-slate-500">一键生成 Cover Letter，精准匹配岗位要求和个人优势。</p>
+                </div>
+                <div class="relative bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="absolute -top-3 -left-3 w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">5</div>
+                    <h3 class="font-bold text-base mb-2 mt-1">准备面试</h3>
+                    <p class="text-sm text-slate-500">生成面试问题和参考回答，覆盖技术、项目、行为维度。</p>
+                </div>
+                <div class="relative bg-white rounded-2xl p-6 border border-slate-100">
+                    <div class="absolute -top-3 -left-3 w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm font-bold">6</div>
+                    <h3 class="font-bold text-base mb-2 mt-1">追踪进度</h3>
+                    <p class="text-sm text-slate-500">看板拖拽管理状态，薪资分析帮你做出更好的决策。</p>
+                </div>
             </div>
         </div>
-    </div>
+    </section>
+
+    <!-- Tech -->
+    <section id="tech" class="py-20 px-6 bg-slate-50">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-2xl font-bold mb-8">技术栈</h2>
+            <div class="flex flex-wrap justify-center gap-3">
+                <span class="px-4 py-2 bg-white rounded-full text-sm text-slate-600 border border-slate-200 font-medium">FastAPI</span>
+                <span class="px-4 py-2 bg-white rounded-full text-sm text-slate-600 border border-slate-200 font-medium">SQLAlchemy</span>
+                <span class="px-4 py-2 bg-white rounded-full text-sm text-slate-600 border border-slate-200 font-medium">SQLite</span>
+                <span class="px-4 py-2 bg-white rounded-full text-sm text-slate-600 border border-slate-200 font-medium">LLM Agent</span>
+                <span class="px-4 py-2 bg-white rounded-full text-sm text-slate-600 border border-slate-200 font-medium">JWT Auth</span>
+                <span class="px-4 py-2 bg-white rounded-full text-sm text-slate-600 border border-slate-200 font-medium">Docker</span>
+                <span class="px-4 py-2 bg-white rounded-full text-sm text-slate-600 border border-slate-200 font-medium">Nginx</span>
+                <span class="px-4 py-2 bg-white rounded-full text-sm text-slate-600 border border-slate-200 font-medium">Tailwind CSS</span>
+            </div>
+        </div>
+    </section>
 
     <!-- CTA -->
-    <div class="bg-blue-600 py-16 px-8 text-center">
-        <h2 class="text-3xl font-bold text-white mb-4">准备好提升求职效率了吗？</h2>
-        <p class="text-blue-100 mb-8">免费注册，开始你的智能求职之旅。</p>
-        <a href="/login" class="inline-block bg-white text-blue-600 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-50">免费注册</a>
-    </div>
+    <section class="py-24 px-6">
+        <div class="max-w-3xl mx-auto text-center">
+            <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-12 md:p-16">
+                <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">准备好提升求职效率了吗？</h2>
+                <p class="text-indigo-100 mb-8 text-lg">免费注册，开始你的智能求职之旅。</p>
+                <a href="/login" class="inline-flex items-center gap-2 bg-white text-slate-900 px-8 py-3.5 rounded-xl text-base font-semibold hover:shadow-lg transition-all">
+                    立即开始
+                    <iconify-icon icon="solar:arrow-right-bold" width="18"></iconify-icon>
+                </a>
+            </div>
+        </div>
+    </section>
 
-    <footer class="text-center py-6 text-sm text-slate-400">
+    <footer class="text-center py-8 text-sm text-slate-400 border-t border-slate-100">
         JobPilot &copy; 2026
     </footer>
+
+    <script>
+        // Nav scroll effect
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('nav');
+            if (window.scrollY > 50) {
+                nav.classList.add('bg-white/80', 'backdrop-blur-lg', 'shadow-sm');
+            } else {
+                nav.classList.remove('bg-white/80', 'backdrop-blur-lg', 'shadow-sm');
+            }
+        });
+    </script>
 </body>
 </html>

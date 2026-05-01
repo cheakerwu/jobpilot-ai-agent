@@ -53,6 +53,16 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
+function showToast(message, type = "success") {
+    const colors = { success: "bg-emerald-600", error: "bg-red-600", info: "bg-indigo-600" };
+    const icons = { success: "solar:check-circle-bold", error: "solar:close-circle-bold", info: "solar:info-circle-bold" };
+    const toast = document.createElement("div");
+    toast.className = `toast ${colors[type] || colors.info} text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2`;
+    toast.innerHTML = `<iconify-icon icon="${icons[type] || icons.info}" width="18"></iconify-icon>${escapeHtml(message)}`;
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = "0"; toast.style.transition = "opacity 0.3s"; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
 function switchPage(page, target) {
     document.querySelectorAll("[id^='page-']").forEach((el) => el.classList.add("hidden"));
     document.getElementById(`page-${page}`).classList.remove("hidden");
@@ -94,10 +104,14 @@ async function importManual(event) {
         body: JSON.stringify(payload),
     });
     const data = await res.json();
-    result.textContent = data.success ? `导入成功：${data.job.title}` : `导入失败：${data.message || data.detail}`;
     if (data.success) {
+        result.textContent = `导入成功：${data.job.title}`;
+        showToast(`已导入：${data.job.title}`);
         form.reset();
         loadStats();
+    } else {
+        result.textContent = `导入失败：${data.message || data.detail}`;
+        showToast(data.message || data.detail || "导入失败", "error");
     }
 }
 
@@ -110,12 +124,14 @@ async function importCsv(event) {
 
     const res = await fetch(`${API_BASE}/imports/csv`, {method: "POST", body});
     const data = await res.json();
-    result.textContent = data.success
-        ? `导入完成：成功 ${data.success_count}，失败 ${data.failed_count}，跳过 ${data.skipped_count}`
-        : `导入失败：${data.message || data.detail}`;
     if (data.success) {
+        result.textContent = `导入完成：成功 ${data.success_count}，失败 ${data.failed_count}，跳过 ${data.skipped_count}`;
+        showToast(`批量导入完成：${data.success_count} 条`);
         form.reset();
         loadStats();
+    } else {
+        result.textContent = `导入失败：${data.message || data.detail}`;
+        showToast(data.message || data.detail || "导入失败", "error");
     }
 }
 
@@ -128,12 +144,14 @@ async function importJdPdf(event) {
 
     const res = await fetch(`${API_BASE}/imports/pdf-jd`, {method: "POST", body});
     const data = await res.json();
-    result.textContent = data.success
-        ? `导入成功：${data.job.title} · ${data.job.company}`
-        : `导入失败：${data.detail || data.message}`;
     if (data.success) {
+        result.textContent = `导入成功：${data.job.title} · ${data.job.company}`;
+        showToast(`已导入：${data.job.title}`);
         form.reset();
         loadStats();
+    } else {
+        result.textContent = `导入失败：${data.detail || data.message}`;
+        showToast(data.detail || data.message || "导入失败", "error");
     }
 }
 
@@ -143,29 +161,29 @@ async function loadJobs() {
     const res = await fetch(`${API_BASE}/jobs?per_page=50`);
     const data = await res.json();
     if (!data.success || data.data.length === 0) {
-        container.innerHTML = "<div class='panel p-5 text-sm text-slate-500'>暂无岗位，先导入一条 JD。</div>";
+        container.innerHTML = "<div class='card p-5 text-sm text-slate-500'>暂无岗位，先导入一条 JD。</div>";
         return;
     }
 
     container.innerHTML = data.data.map((job) => `
-        <article class="panel p-5">
+        <article class="card p-5">
             <div class="flex items-start justify-between gap-4">
-                <div>
-                    <h3 class="font-bold">${escapeHtml(job.title)}</h3>
-                    <p class="text-sm text-slate-500 mt-1">${escapeHtml(job.company)} · ${escapeHtml(job.city || "未知城市")} · ${escapeHtml(job.salary || "薪资未填")}</p>
-                    <p class="text-xs text-slate-400 mt-2">
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-bold text-sm">${escapeHtml(job.title)}</h3>
+                    <p class="text-xs text-slate-500 mt-1">${escapeHtml(job.company)} · ${escapeHtml(job.city || "未知城市")} · ${escapeHtml(job.salary || "薪资未填")}</p>
+                    <p class="text-xs text-slate-400 mt-1.5">
                         来源：${escapeHtml(job.source)} ·
-                        状态：<span id="job-status-${job.id}">${escapeHtml(job.status)}</span> ·
-                        匹配分：<span id="job-score-${job.id}">${job.match_score ?? "-"}</span>
+                        状态：<span id="job-status-${job.id}" class="font-medium">${escapeHtml(job.status)}</span> ·
+                        匹配分：<span id="job-score-${job.id}" class="font-medium">${job.match_score ?? "-"}</span>
                     </p>
                 </div>
-                <div class="flex gap-2 shrink-0">
+                <div class="flex flex-wrap gap-1.5 shrink-0">
                     <button class="btn btn-secondary" onclick="analyzeJob(${job.id})"><iconify-icon icon="solar:magic-stick-3-bold-duotone"></iconify-icon>分析</button>
-                    <button class="btn btn-secondary" onclick="showAnalysis(${job.id})"><iconify-icon icon="solar:chart-2-bold-duotone"></iconify-icon>匹配详情</button>
-                    <button class="btn btn-primary" onclick="generateResume(${job.id})"><iconify-icon icon="solar:document-text-bold-duotone"></iconify-icon>生成简历</button>
-                    <button class="btn btn-secondary" onclick="showResumeVersions(${job.id})"><iconify-icon icon="solar:documents-bold-duotone"></iconify-icon>简历版本</button>
+                    <button class="btn btn-secondary" onclick="showAnalysis(${job.id})"><iconify-icon icon="solar:chart-2-bold-duotone"></iconify-icon>详情</button>
+                    <button class="btn btn-primary" onclick="generateResume(${job.id})"><iconify-icon icon="solar:document-text-bold-duotone"></iconify-icon>简历</button>
+                    <button class="btn btn-secondary" onclick="showResumeVersions(${job.id})"><iconify-icon icon="solar:documents-bold-duotone"></iconify-icon>版本</button>
                     <button class="btn btn-secondary" onclick="generateCoverLetter(${job.id})"><iconify-icon icon="solar:letter-bold-duotone"></iconify-icon>Cover Letter</button>
-                    <button class="btn btn-secondary" onclick="generateInterviewPrep(${job.id})"><iconify-icon icon="solar:notebook-bold-duotone"></iconify-icon>面试准备</button>
+                    <button class="btn btn-secondary" onclick="generateInterviewPrep(${job.id})"><iconify-icon icon="solar:notebook-bold-duotone"></iconify-icon>面试</button>
                 </div>
             </div>
             <div id="job-result-${job.id}" class="text-sm mt-3 text-slate-600"></div>
@@ -255,12 +273,12 @@ function renderAnalysisPanel(analysis) {
     const requiredSkills = explanation.skill_requirements || analysis.parsed_jd?.required_skills || [];
 
     return `
-        <div class="mt-4 border-t border-slate-200 pt-4 space-y-4">
+        <div class="mt-4 border-t border-slate-100 pt-4 space-y-4">
             <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                <div class="bg-slate-50 rounded-md p-3"><div class="text-xs text-slate-500">推荐等级</div><div class="text-xl font-bold">${escapeHtml(analysis.recommendation_level || "-")}</div></div>
-                <div class="bg-slate-50 rounded-md p-3"><div class="text-xs text-slate-500">匹配分</div><div class="text-xl font-bold">${analysis.match_score ?? "-"}</div></div>
-                <div class="bg-slate-50 rounded-md p-3"><div class="text-xs text-slate-500">风险分</div><div class="text-xl font-bold">${analysis.risk_score ?? "-"}</div></div>
-                <div class="bg-slate-50 rounded-md p-3"><div class="text-xs text-slate-500">分析器</div><div class="text-xl font-bold">${escapeHtml(analysis.analyzer_type || "-")}</div></div>
+                <div class="bg-slate-50 rounded-xl p-3"><div class="text-xs text-slate-500">推荐等级</div><div class="text-xl font-bold mt-1">${escapeHtml(analysis.recommendation_level || "-")}</div></div>
+                <div class="bg-indigo-50 rounded-xl p-3"><div class="text-xs text-indigo-600">匹配分</div><div class="text-xl font-bold mt-1 text-indigo-700">${analysis.match_score ?? "-"}</div></div>
+                <div class="bg-amber-50 rounded-xl p-3"><div class="text-xs text-amber-600">风险分</div><div class="text-xl font-bold mt-1 text-amber-700">${analysis.risk_score ?? "-"}</div></div>
+                <div class="bg-slate-50 rounded-xl p-3"><div class="text-xs text-slate-500">分析器</div><div class="text-xl font-bold mt-1">${escapeHtml(analysis.analyzer_type || "-")}</div></div>
             </div>
             <div>
                 <div class="font-semibold text-slate-800">匹配结论</div>
@@ -309,10 +327,10 @@ function renderMatchedEvidence(items) {
     if (!items.length) {
         return `<p class="mt-2 text-slate-400">暂无匹配证据。可以先在证据库导入 PDF 简历或手动补充项目经历。</p>`;
     }
-    return `<ul class="mt-2 space-y-2">${items.map((item) => `
-        <li class="bg-green-50 rounded-md p-2">
-            <span class="font-medium text-green-800">${escapeHtml(item.requirement || "要求")}</span>
-            <span class="text-green-700"> → ${escapeHtml(item.evidence_title || `证据 #${item.evidence_id ?? "-"}`)}</span>
+    return `<ul class="mt-2 space-y-1.5">${items.map((item) => `
+        <li class="bg-emerald-50 rounded-lg p-2.5">
+            <span class="font-medium text-emerald-800 text-sm">${escapeHtml(item.requirement || "要求")}</span>
+            <span class="text-emerald-600 text-sm"> → ${escapeHtml(item.evidence_title || `证据 #${item.evidence_id ?? "-"}`)}</span>
         </li>
     `).join("")}</ul>`;
 }
@@ -321,10 +339,10 @@ function renderGaps(items) {
     if (!items.length) {
         return `<p class="mt-2 text-slate-400">暂无明显待补充项。</p>`;
     }
-    return `<ul class="mt-2 space-y-2">${items.map((item) => `
-        <li class="bg-amber-50 rounded-md p-2">
-            <div class="font-medium text-amber-800">${escapeHtml(item.requirement || "缺口")}</div>
-            <div class="text-amber-700">${escapeHtml(item.suggestion || "")}</div>
+    return `<ul class="mt-2 space-y-1.5">${items.map((item) => `
+        <li class="bg-amber-50 rounded-lg p-2.5">
+            <div class="font-medium text-amber-800 text-sm">${escapeHtml(item.requirement || "缺口")}</div>
+            <div class="text-amber-600 text-sm">${escapeHtml(item.suggestion || "")}</div>
         </li>
     `).join("")}</ul>`;
 }
@@ -337,8 +355,8 @@ function renderRisks(risks, doNotExaggerate) {
     if (!riskItems.length) {
         return `<p class="mt-2 text-slate-400">暂无明显风险提示。</p>`;
     }
-    return `<ul class="mt-2 space-y-2">${riskItems.map((item) => `
-        <li class="bg-red-50 rounded-md p-2 text-red-700">${escapeHtml(item)}</li>
+    return `<ul class="mt-2 space-y-1.5">${riskItems.map((item) => `
+        <li class="bg-red-50 rounded-lg p-2.5 text-red-600 text-sm">${escapeHtml(item)}</li>
     `).join("")}</ul>`;
 }
 
@@ -349,39 +367,39 @@ function renderResumePanel(version) {
         ? Object.entries(version.keyword_coverage)
         : [];
     return `
-        <div class="mt-4 border-t border-slate-200 pt-4 space-y-4">
+        <div class="mt-4 border-t border-slate-100 pt-4 space-y-4">
             <div class="flex items-center justify-between gap-4">
                 <div>
-                    <div class="font-semibold text-slate-800">简历版本 #${version.id}</div>
-                    <div class="text-xs text-slate-500">${escapeHtml(version.title || "")} · ${escapeHtml(version.created_at || "")}</div>
+                    <div class="font-semibold text-sm">简历版本 #${version.id}</div>
+                    <div class="text-xs text-slate-500 mt-0.5">${escapeHtml(version.title || "")} · ${escapeHtml(version.created_at || "")}</div>
                 </div>
-                <button class="btn btn-secondary" onclick="copyResumeContent(${version.id})"><iconify-icon icon="solar:copy-bold-duotone"></iconify-icon>复制内容</button>
+                <button class="btn btn-secondary" onclick="copyResumeContent(${version.id})"><iconify-icon icon="solar:copy-bold-duotone"></iconify-icon>复制</button>
             </div>
             ${warnings.length ? `
                 <div>
-                    <div class="font-semibold text-slate-800">风险提示</div>
-                    <ul class="mt-2 space-y-2">${warnings.map((item) => `<li class="bg-amber-50 rounded-md p-2 text-amber-800">${escapeHtml(item)}</li>`).join("")}</ul>
+                    <div class="font-semibold text-sm text-slate-800">风险提示</div>
+                    <ul class="mt-2 space-y-1.5">${warnings.map((item) => `<li class="bg-amber-50 rounded-lg p-2.5 text-amber-700 text-sm">${escapeHtml(item)}</li>`).join("")}</ul>
                 </div>
             ` : ""}
             ${evidenceLinks.length ? `
                 <div>
-                    <div class="font-semibold text-slate-800">引用证据</div>
-                    <ul class="mt-2 space-y-2">${evidenceLinks.slice(0, 8).map((item) => `
-                        <li class="bg-green-50 rounded-md p-2 text-green-800">证据 #${escapeHtml(item.evidence_id)}：${escapeHtml(item.bullet_text || "")}</li>
+                    <div class="font-semibold text-sm text-slate-800">引用证据</div>
+                    <ul class="mt-2 space-y-1.5">${evidenceLinks.slice(0, 8).map((item) => `
+                        <li class="bg-emerald-50 rounded-lg p-2.5 text-emerald-700 text-sm">证据 #${escapeHtml(item.evidence_id)}：${escapeHtml(item.bullet_text || "")}</li>
                     `).join("")}</ul>
                 </div>
             ` : ""}
             ${coverage.length ? `
                 <div>
-                    <div class="font-semibold text-slate-800">关键词覆盖</div>
-                    <div class="flex flex-wrap gap-2 mt-2">${coverage.slice(0, 24).map(([key, value]) => `
-                        <span class="px-2 py-1 rounded text-xs ${value ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-500"}">${escapeHtml(key)} ${value ? "✓" : "×"}</span>
+                    <div class="font-semibold text-sm text-slate-800">关键词覆盖</div>
+                    <div class="flex flex-wrap gap-1.5 mt-2">${coverage.slice(0, 24).map(([key, value]) => `
+                        <span class="px-2 py-1 rounded-lg text-xs font-medium ${value ? "bg-indigo-50 text-indigo-700" : "bg-slate-100 text-slate-500"}">${escapeHtml(key)} ${value ? "✓" : "×"}</span>
                     `).join("")}</div>
                 </div>
             ` : ""}
             <div>
-                <div class="font-semibold text-slate-800 mb-2">简历预览</div>
-                <pre id="resume-content-${version.id}" class="bg-slate-950 text-slate-50 rounded-md p-4 overflow-auto max-h-[560px] whitespace-pre-wrap text-sm leading-6">${escapeHtml(version.content || "")}</pre>
+                <div class="font-semibold text-sm text-slate-800 mb-2">简历预览</div>
+                <pre id="resume-content-${version.id}" class="bg-slate-950 text-slate-50 rounded-xl p-4 overflow-auto max-h-[560px] whitespace-pre-wrap text-sm leading-6">${escapeHtml(version.content || "")}</pre>
             </div>
         </div>
     `;
@@ -399,18 +417,21 @@ async function loadEvidence() {
     const res = await fetch(`${API_BASE}/evidence`);
     const data = await res.json();
     if (!data.success || data.data.length === 0) {
-        container.innerHTML = "<div class='panel p-5 text-sm text-slate-500'>暂无证据，可以手动新增或调用 /api/evidence/init 初始化。</div>";
+        container.innerHTML = "<div class='card p-5 text-sm text-slate-500'>暂无证据，可以手动新增或调用 /api/evidence/init 初始化。</div>";
         return;
     }
     container.innerHTML = data.data.map((ev) => `
-        <article class="panel p-5">
+        <article class="card p-5">
             <div class="flex items-start justify-between gap-4">
-                <div>
-                    <h3 class="font-bold">${escapeHtml(ev.title)}</h3>
-                    <p class="text-xs text-slate-500 mt-1">${escapeHtml(ev.type)} · ${escapeHtml((ev.skill_tags || []).join(", "))}</p>
-                    <p class="text-sm text-slate-600 mt-2 whitespace-pre-wrap">${escapeHtml(ev.content || "")}</p>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-bold text-sm">${escapeHtml(ev.title)}</h3>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-100 text-xs text-slate-500">${escapeHtml(ev.type)}</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1">${escapeHtml((ev.skill_tags || []).join(", ") || "无标签")}</p>
+                    <p class="text-sm text-slate-600 mt-2 whitespace-pre-wrap leading-relaxed">${escapeHtml(ev.content || "")}</p>
                 </div>
-                <button class="btn btn-secondary" onclick="deleteEvidence(${ev.id})"><iconify-icon icon="solar:trash-bin-trash-bold-duotone"></iconify-icon>删除</button>
+                <button class="btn btn-ghost text-red-500 hover:bg-red-50 hover:text-red-600" onclick="deleteEvidence(${ev.id})"><iconify-icon icon="solar:trash-bin-trash-bold-duotone"></iconify-icon></button>
             </div>
         </article>
     `).join("");
@@ -425,12 +446,14 @@ async function importResumePdf(event) {
 
     const res = await fetch(`${API_BASE}/evidence/import-resume-pdf`, {method: "POST", body});
     const data = await res.json();
-    result.textContent = data.success
-        ? `导入完成：新增 ${data.count} 条证据`
-        : `导入失败：${data.detail || data.message}`;
     if (data.success) {
+        result.textContent = `导入完成：新增 ${data.count} 条证据`;
+        showToast(`已导入 ${data.count} 条证据`);
         form.reset();
         loadEvidence();
+    } else {
+        result.textContent = `导入失败：${data.detail || data.message}`;
+        showToast(data.detail || data.message || "导入失败", "error");
     }
 }
 
@@ -468,22 +491,29 @@ async function loadRuns() {
     const res = await fetch(`${API_BASE}/agent-runs?limit=30`);
     const data = await res.json();
     if (!data.success || data.data.length === 0) {
-        container.innerHTML = "<div class='panel p-5 text-sm text-slate-500'>暂无 Agent 运行记录。</div>";
+        container.innerHTML = "<div class='card p-5 text-sm text-slate-500'>暂无 Agent 运行记录。</div>";
         return;
     }
-    container.innerHTML = data.data.map((run) => `
-        <article class="panel p-5">
+    container.innerHTML = data.data.map((run) => {
+        const statusColors = { completed: "bg-emerald-100 text-emerald-700", failed: "bg-red-100 text-red-700", running: "bg-amber-100 text-amber-700" };
+        const statusClass = statusColors[run.status] || "bg-slate-100 text-slate-600";
+        return `
+        <article class="card p-5">
             <div class="flex items-center justify-between">
                 <div>
-                    <h3 class="font-bold">#${run.id} ${escapeHtml(run.workflow_name)}</h3>
-                    <p class="text-sm text-slate-500 mt-1">岗位 ID：${run.job_id ?? "-"} · 状态：${escapeHtml(run.status)} · 开始：${escapeHtml(run.started_at || "")}</p>
-                    ${run.error_message ? `<p class="text-sm text-red-600 mt-2">${escapeHtml(run.error_message)}</p>` : ""}
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-bold text-sm">#${run.id} ${escapeHtml(run.workflow_name)}</h3>
+                        <span class="px-2 py-0.5 rounded-md text-xs font-medium ${statusClass}">${escapeHtml(run.status)}</span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">岗位 ID：${run.job_id ?? "-"} · 开始：${escapeHtml(run.started_at || "")}</p>
+                    ${run.error_message ? `<p class="text-xs text-red-500 mt-1.5">${escapeHtml(run.error_message)}</p>` : ""}
                 </div>
                 <button class="btn btn-secondary" onclick="loadRunSteps(${run.id})"><iconify-icon icon="solar:list-check-bold-duotone"></iconify-icon>步骤</button>
             </div>
             <div id="run-steps-${run.id}" class="mt-3 text-sm"></div>
         </article>
-    `).join("");
+        `;
+    }).join("");
 }
 
 async function loadRunSteps(runId) {
@@ -629,9 +659,13 @@ async function saveModelSettings(event) {
         body: JSON.stringify(payload),
     });
     const data = await res.json();
-    result.textContent = data.success ? "模型配置已保存" : `保存失败：${formatApiError(data)}`;
     if (data.success) {
+        result.textContent = "模型配置已保存";
+        showToast("模型配置已保存");
         await loadModelSettings();
+    } else {
+        result.textContent = `保存失败：${formatApiError(data)}`;
+        showToast("保存失败", "error");
     }
 }
 
@@ -655,19 +689,19 @@ function renderCoverLetterPanel(cl) {
     const evidenceLinks = Array.isArray(cl.evidence_links) ? cl.evidence_links : [];
     const highlights = Array.isArray(cl.highlights) ? cl.highlights : [];
     return `
-        <div class="mt-4 border-t border-slate-200 pt-4 space-y-4">
+        <div class="mt-4 border-t border-slate-100 pt-4 space-y-4">
             <div class="flex items-center justify-between gap-4">
                 <div>
-                    <div class="font-semibold text-slate-800">Cover Letter #${cl.id}</div>
-                    <div class="text-xs text-slate-500">${escapeHtml(cl.title || "")} · ${escapeHtml(cl.created_at || "")}</div>
+                    <div class="font-semibold text-sm">Cover Letter #${cl.id}</div>
+                    <div class="text-xs text-slate-500 mt-0.5">${escapeHtml(cl.title || "")} · ${escapeHtml(cl.created_at || "")}</div>
                 </div>
                 <button class="btn btn-secondary" onclick="copyCoverLetterContent(${cl.id})"><iconify-icon icon="solar:copy-bold-duotone"></iconify-icon>复制</button>
             </div>
-            ${highlights.length ? `<div><div class="font-semibold text-slate-800">核心亮点</div><div class="flex flex-wrap gap-2 mt-2">${highlights.map((h) => `<span class="px-2 py-1 rounded bg-green-50 text-green-700 text-xs">${escapeHtml(h)}</span>`).join("")}</div></div>` : ""}
-            ${evidenceLinks.length ? `<div><div class="font-semibold text-slate-800">引用证据</div><ul class="mt-2 space-y-1">${evidenceLinks.slice(0, 6).map((e) => `<li class="bg-green-50 rounded-md p-2 text-green-800 text-sm">证据 #${escapeHtml(e.evidence_id)}：${escapeHtml(e.bullet_text || "")}</li>`).join("")}</ul></div>` : ""}
+            ${highlights.length ? `<div><div class="font-semibold text-sm text-slate-800">核心亮点</div><div class="flex flex-wrap gap-1.5 mt-2">${highlights.map((h) => `<span class="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium">${escapeHtml(h)}</span>`).join("")}</div></div>` : ""}
+            ${evidenceLinks.length ? `<div><div class="font-semibold text-sm text-slate-800">引用证据</div><ul class="mt-2 space-y-1.5">${evidenceLinks.slice(0, 6).map((e) => `<li class="bg-emerald-50 rounded-lg p-2.5 text-emerald-700 text-sm">证据 #${escapeHtml(e.evidence_id)}：${escapeHtml(e.bullet_text || "")}</li>`).join("")}</ul></div>` : ""}
             <div>
-                <div class="font-semibold text-slate-800 mb-2">求职信预览</div>
-                <pre id="cover-letter-content-${cl.id}" class="bg-slate-950 text-slate-50 rounded-md p-4 overflow-auto max-h-[400px] whitespace-pre-wrap text-sm leading-6">${escapeHtml(cl.content || "")}</pre>
+                <div class="font-semibold text-sm text-slate-800 mb-2">求职信预览</div>
+                <pre id="cover-letter-content-${cl.id}" class="bg-slate-950 text-slate-50 rounded-xl p-4 overflow-auto max-h-[400px] whitespace-pre-wrap text-sm leading-6">${escapeHtml(cl.content || "")}</pre>
             </div>
         </div>
     `;
@@ -706,25 +740,26 @@ function renderInterviewPrepPanel(prep) {
     };
 
     return `
-        <div class="mt-4 border-t border-slate-200 pt-4 space-y-4">
-            <div class="font-semibold text-slate-800">面试问题 (${questions.length})</div>
-            <div class="space-y-3">
+        <div class="mt-4 border-t border-slate-100 pt-4 space-y-4">
+            <div class="font-semibold text-sm text-slate-800">面试问题 (${questions.length})</div>
+            <div class="space-y-2.5">
                 ${questions.map((q, i) => {
                     const cat = q.category || "通用";
                     const color = categoryColors[cat] || "bg-slate-100 text-slate-700";
                     return `
-                        <div class="bg-slate-50 rounded-md p-3">
-                            <div class="flex items-center gap-2 mb-1">
-                                <span class="px-2 py-0.5 rounded text-xs ${color}">${escapeHtml(cat)}</span>
-                                <span class="font-medium text-slate-800">Q${i + 1}: ${escapeHtml(q.question || "")}</span>
+                        <div class="bg-slate-50 rounded-xl p-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 rounded-md text-xs font-medium ${color}">${escapeHtml(cat)}</span>
+                                <span class="font-medium text-sm text-slate-800">Q${i + 1}</span>
                             </div>
-                            <p class="text-sm text-slate-600 mt-1">${escapeHtml(q.answer || "")}</p>
+                            <p class="text-sm font-medium text-slate-700 mb-1.5">${escapeHtml(q.question || "")}</p>
+                            <p class="text-sm text-slate-500 leading-relaxed">${escapeHtml(q.answer || "")}</p>
                         </div>
                     `;
                 }).join("")}
             </div>
-            ${tips.length ? `<div><div class="font-semibold text-slate-800">准备建议</div><ul class="mt-2 space-y-1">${tips.map((t) => `<li class="text-sm text-slate-600">- ${escapeHtml(t)}</li>`).join("")}</ul></div>` : ""}
-            ${risks.length ? `<div><div class="font-semibold text-slate-800">风险领域</div><ul class="mt-2 space-y-2">${risks.map((r) => `<li class="bg-amber-50 rounded-md p-2 text-amber-800 text-sm">${escapeHtml(r.area || "")}: ${escapeHtml(r.suggestion || "")}</li>`).join("")}</ul></div>` : ""}
+            ${tips.length ? `<div><div class="font-semibold text-sm text-slate-800 mb-2">准备建议</div><ul class="space-y-1.5">${tips.map((t) => `<li class="text-sm text-slate-600 flex items-start gap-2"><iconify-icon icon="solar:check-circle-bold" class="text-emerald-500 mt-0.5 shrink-0" width="14"></iconify-icon>${escapeHtml(t)}</li>`).join("")}</ul></div>` : ""}
+            ${risks.length ? `<div><div class="font-semibold text-sm text-slate-800 mb-2">风险领域</div><ul class="space-y-1.5">${risks.map((r) => `<li class="bg-amber-50 rounded-lg p-2.5 text-amber-700 text-sm">${escapeHtml(r.area || "")}: ${escapeHtml(r.suggestion || "")}</li>`).join("")}</ul></div>` : ""}
         </div>
     `;
 }
@@ -756,11 +791,11 @@ function renderSalaryOverview(overall) {
     const container = document.getElementById("salary-overview");
     const fmt = (v) => v ? `${(v / 1000).toFixed(1)}K` : "-";
     container.innerHTML = `
-        <div class="panel p-5"><div class="text-sm text-slate-500">有效岗位</div><div class="text-3xl font-bold mt-2">${overall.count}</div></div>
-        <div class="panel p-5"><div class="text-sm text-slate-500">平均薪资</div><div class="text-3xl font-bold mt-2">${fmt(overall.avg)}</div></div>
-        <div class="panel p-5"><div class="text-sm text-slate-500">中位数</div><div class="text-3xl font-bold mt-2">${fmt(overall.median)}</div></div>
-        <div class="panel p-5"><div class="text-sm text-slate-500">最低</div><div class="text-3xl font-bold mt-2">${fmt(overall.min)}</div></div>
-        <div class="panel p-5"><div class="text-sm text-slate-500">最高</div><div class="text-3xl font-bold mt-2">${fmt(overall.max)}</div></div>
+        <div class="card p-5"><div class="text-xs text-slate-500">有效岗位</div><div class="text-2xl font-bold mt-1.5">${overall.count}</div></div>
+        <div class="card p-5"><div class="text-xs text-slate-500">平均薪资</div><div class="text-2xl font-bold mt-1.5 text-indigo-600">${fmt(overall.avg)}</div></div>
+        <div class="card p-5"><div class="text-xs text-slate-500">中位数</div><div class="text-2xl font-bold mt-1.5">${fmt(overall.median)}</div></div>
+        <div class="card p-5"><div class="text-xs text-slate-500">最低</div><div class="text-2xl font-bold mt-1.5 text-emerald-600">${fmt(overall.min)}</div></div>
+        <div class="card p-5"><div class="text-xs text-slate-500">最高</div><div class="text-2xl font-bold mt-1.5 text-amber-600">${fmt(overall.max)}</div></div>
     `;
 }
 
@@ -875,12 +910,12 @@ async function loadKanbanBoard() {
 
 function renderKanbanColumn(status, label, jobs) {
     const countBadge = jobs.length > 0
-        ? `<span class="ml-2 px-1.5 py-0.5 rounded bg-slate-200 text-xs font-medium">${jobs.length}</span>`
+        ? `<span class="ml-2 px-1.5 py-0.5 rounded-md bg-slate-200 text-xs font-medium">${jobs.length}</span>`
         : "";
     return `
-        <div class="kanban-column panel p-3 flex flex-col" data-status="${escapeHtml(status)}"
+        <div class="kanban-column card p-3 flex flex-col" data-status="${escapeHtml(status)}"
              ondragover="kanbanDragOver(event)" ondragleave="kanbanDragLeave(event)" ondrop="kanbanDrop(event, '${escapeHtml(status)}')">
-            <div class="font-semibold text-sm text-slate-700 mb-3 flex items-center">${escapeHtml(label)}${countBadge}</div>
+            <div class="font-semibold text-xs text-slate-600 mb-3 flex items-center uppercase tracking-wide">${escapeHtml(label)}${countBadge}</div>
             <div class="space-y-2 flex-1 min-h-[60px]">
                 ${jobs.map((j) => renderKanbanCard(j)).join("")}
             </div>
@@ -890,16 +925,16 @@ function renderKanbanColumn(status, label, jobs) {
 
 function renderKanbanCard(job) {
     return `
-        <div class="kanban-card panel p-3" draggable="true"
+        <div class="kanban-card card p-3" draggable="true"
              data-job-id="${job.id}"
              ondragstart="kanbanDragStart(event, ${job.id})" ondragend="kanbanDragEnd(event)">
-            <div class="font-bold text-sm">${escapeHtml(job.title)}</div>
-            <div class="text-xs text-slate-500 mt-1">${escapeHtml(job.company)}</div>
-            <div class="flex items-center justify-between mt-2 text-xs text-slate-400">
+            <div class="font-bold text-xs">${escapeHtml(job.title)}</div>
+            <div class="text-[11px] text-slate-500 mt-1">${escapeHtml(job.company)}</div>
+            <div class="flex items-center justify-between mt-2 text-[11px] text-slate-400">
                 <span>${escapeHtml(job.city || "-")}</span>
                 <span>${escapeHtml(job.salary || "-")}</span>
             </div>
-            ${job.match_score != null ? `<div class="mt-1 text-xs"><span class="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">匹配 ${job.match_score}</span></div>` : ""}
+            ${job.match_score != null ? `<div class="mt-1.5"><span class="px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-medium">匹配 ${job.match_score}</span></div>` : ""}
         </div>
     `;
 }
@@ -938,8 +973,9 @@ async function kanbanDrop(event, newStatus) {
     if (data.success) {
         loadKanbanBoard();
         loadStats();
+        showToast("状态已更新");
     } else {
-        alert(data.detail || data.message || "移动失败");
+        showToast(data.detail || data.message || "移动失败", "error");
     }
 }
 

@@ -5,59 +5,125 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 - JobPilot</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Microsoft YaHei"', '"PingFang SC"', 'system-ui', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
     <style>
-        body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f8fafc; }
-        .tab-active { color: #2563eb; border-bottom: 2px solid #2563eb; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .tab-active { color: #4f46e5; border-color: #4f46e5; }
+        input:focus { outline: none; border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15); }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center">
-    <div class="w-full max-w-md mx-4">
-        <div class="text-center mb-8">
-            <div class="inline-flex items-center gap-3 mb-2">
-                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xl font-bold">J</div>
+<body class="min-h-screen flex font-sans antialiased">
+    <!-- Left: Brand -->
+    <div class="hidden lg:flex lg:w-1/2 gradient-bg relative overflow-hidden">
+        <div class="absolute inset-0 opacity-10">
+            <div class="absolute top-20 left-20 w-64 h-64 border border-white/30 rounded-full"></div>
+            <div class="absolute bottom-32 right-16 w-48 h-48 border border-white/20 rounded-full"></div>
+            <div class="absolute top-1/2 left-1/3 w-32 h-32 border border-white/20 rounded-full"></div>
+        </div>
+        <div class="relative z-10 flex flex-col justify-center px-16 text-white">
+            <div class="flex items-center gap-3 mb-10">
+                <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <iconify-icon icon="solar:case-minimalistic-bold-duotone" class="text-white" width="24"></iconify-icon>
+                </div>
                 <span class="text-2xl font-bold">JobPilot</span>
             </div>
-            <p class="text-slate-500 text-sm">求职 CRM + Agent Copilot</p>
+            <h2 class="text-3xl font-bold mb-4 leading-tight">让 AI 成为你的<br>求职超级助手</h2>
+            <p class="text-indigo-100 text-base leading-relaxed mb-10">
+                岗位分析、简历定制、求职信生成、面试准备——<br>一个平台，全流程覆盖。
+            </p>
+            <div class="space-y-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center">
+                        <iconify-icon icon="solar:check-circle-bold" class="text-white" width="16"></iconify-icon>
+                    </div>
+                    <span class="text-sm text-indigo-100">AI 驱动的岗位匹配分析</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center">
+                        <iconify-icon icon="solar:check-circle-bold" class="text-white" width="16"></iconify-icon>
+                    </div>
+                    <span class="text-sm text-indigo-100">基于证据库的简历生成</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center">
+                        <iconify-icon icon="solar:check-circle-bold" class="text-white" width="16"></iconify-icon>
+                    </div>
+                    <span class="text-sm text-indigo-100">面试问题与参考回答</span>
+                </div>
+            </div>
         </div>
+    </div>
 
-        <div class="bg-white rounded-lg border border-slate-200 p-6">
-            <div class="flex mb-6">
-                <button id="tab-login" class="flex-1 py-2 text-center font-semibold tab-active" onclick="switchTab('login')">登录</button>
-                <button id="tab-register" class="flex-1 py-2 text-center font-semibold text-slate-400" onclick="switchTab('register')">注册</button>
+    <!-- Right: Form -->
+    <div class="flex-1 flex items-center justify-center px-6 py-12 bg-white">
+        <div class="w-full max-w-md">
+            <!-- Mobile logo -->
+            <div class="lg:hidden flex items-center gap-2.5 mb-10">
+                <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                    <iconify-icon icon="solar:case-minimalistic-bold-duotone" class="text-white" width="18"></iconify-icon>
+                </div>
+                <span class="text-lg font-bold">JobPilot</span>
             </div>
 
-            <form id="form-login" onsubmit="handleLogin(event)">
-                <div class="mb-4">
-                    <label class="block text-sm font-semibold text-slate-600 mb-1">用户名</label>
-                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" name="username" required>
+            <div class="mb-8">
+                <h1 class="text-2xl font-bold text-slate-900">欢迎回来</h1>
+                <p class="text-sm text-slate-500 mt-1">登录你的 JobPilot 账号</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex gap-6 mb-8 border-b border-slate-200">
+                <button id="tab-login" class="pb-3 text-sm font-semibold border-b-2 tab-active transition-colors" onclick="switchTab('login')">登录</button>
+                <button id="tab-register" class="pb-3 text-sm font-semibold text-slate-400 border-b-2 border-transparent transition-colors hover:text-slate-600" onclick="switchTab('register')">注册</button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="form-login" onsubmit="handleLogin(event)" class="space-y-5">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">用户名</label>
+                    <input class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm transition-all placeholder:text-slate-400" name="username" placeholder="输入用户名" required>
                 </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-semibold text-slate-600 mb-1">密码</label>
-                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" type="password" name="password" required>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">密码</label>
+                    <input class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm transition-all placeholder:text-slate-400" type="password" name="password" placeholder="输入密码" required>
                 </div>
-                <div id="login-error" class="text-red-500 text-sm mb-3 hidden"></div>
-                <button class="w-full bg-blue-600 text-white py-2 rounded-md font-semibold hover:bg-blue-700" type="submit">登录</button>
+                <div id="login-error" class="text-red-500 text-sm hidden bg-red-50 px-4 py-2.5 rounded-xl"></div>
+                <button class="w-full bg-slate-900 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors" type="submit">登录</button>
             </form>
 
-            <form id="form-register" class="hidden" onsubmit="handleRegister(event)">
-                <div class="mb-4">
-                    <label class="block text-sm font-semibold text-slate-600 mb-1">用户名</label>
-                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" name="username" required minlength="2" maxlength="50">
+            <!-- Register Form -->
+            <form id="form-register" class="hidden space-y-5" onsubmit="handleRegister(event)">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">用户名</label>
+                    <input class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm transition-all placeholder:text-slate-400" name="username" placeholder="2-50 个字符" required minlength="2" maxlength="50">
                 </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-semibold text-slate-600 mb-1">邮箱</label>
-                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" type="email" name="email" required>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">邮箱</label>
+                    <input class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm transition-all placeholder:text-slate-400" type="email" name="email" placeholder="your@email.com" required>
                 </div>
-                <div class="mb-4">
-                    <label class="block text-sm font-semibold text-slate-600 mb-1">密码</label>
-                    <input class="w-full border border-slate-300 rounded-md px-3 py-2" type="password" name="password" required minlength="6">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">密码</label>
+                    <input class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm transition-all placeholder:text-slate-400" type="password" name="password" placeholder="至少 6 个字符" required minlength="6">
                 </div>
-                <div id="register-error" class="text-red-500 text-sm mb-3 hidden"></div>
-                <button class="w-full bg-blue-600 text-white py-2 rounded-md font-semibold hover:bg-blue-700" type="submit">注册</button>
+                <div id="register-error" class="text-red-500 text-sm hidden bg-red-50 px-4 py-2.5 rounded-xl"></div>
+                <button class="w-full bg-slate-900 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-slate-800 transition-colors" type="submit">创建账号</button>
             </form>
+
+            <p class="text-center text-sm text-slate-400 mt-8">
+                <a href="/" class="text-slate-500 hover:text-indigo-600 transition-colors inline-flex items-center gap-1">
+                    <iconify-icon icon="solar:arrow-left-bold" width="14"></iconify-icon>
+                    返回首页
+                </a>
+            </p>
         </div>
-
-        <p class="text-center text-sm text-slate-400 mt-4"><a href="/" class="text-blue-600 hover:underline">返回首页</a></p>
     </div>
 
     <script>
@@ -108,7 +174,6 @@
         } catch { showError("register-error", "网络错误"); }
     }
 
-    // 已登录则跳转
     if (localStorage.getItem("token")) window.location.href = "/app";
     </script>
 </body>
