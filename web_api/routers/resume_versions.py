@@ -168,20 +168,36 @@ async def generate_resume(req: GenerateResumeRequest, current_user: User = Depen
 
 
 @router.get("")
-async def list_resume_versions(current_user: User = Depends(get_current_user)):
-    """获取所有简历版本"""
+async def list_resume_versions(
+    page: int = 1,
+    per_page: int = 20,
+    current_user: User = Depends(get_current_user),
+):
+    """获取所有简历版本（分页）"""
+    page = max(1, page)
+    per_page = max(1, min(per_page, 100))
     db = get_db()
     try:
-        # 查当前用户的简历版本
         from src.storage.models import ResumeVersion
-        from sqlalchemy import desc
+        from sqlalchemy import desc, func
+        total = db.session.query(func.count(ResumeVersion.id)).filter(
+            ResumeVersion.user_id == current_user.id
+        ).scalar()
         versions = (
             db.session.query(ResumeVersion)
             .filter(ResumeVersion.user_id == current_user.id)
             .order_by(desc(ResumeVersion.created_at))
+            .offset((page - 1) * per_page)
+            .limit(per_page)
             .all()
         )
-        return {"success": True, "data": [_rv_to_dict(rv) for rv in versions]}
+        return {
+            "success": True,
+            "data": [_rv_to_dict(rv) for rv in versions],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+        }
     finally:
         db.close()
 

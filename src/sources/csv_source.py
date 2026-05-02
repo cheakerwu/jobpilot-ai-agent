@@ -6,6 +6,8 @@ import io
 from typing import Iterable
 from .base import JobSource
 
+MAX_CSV_ROWS = 10000
+
 # 标准列名映射：允许中英文列名
 COLUMN_ALIASES = {
     "title": ["title", "职位", "职位名称", "岗位", "岗位名称", "job_title"],
@@ -58,6 +60,9 @@ class CsvJobSource(JobSource):
                 df = pd.read_csv(buf, encoding="utf-8-sig")
         else:
             return
+
+        if len(df) > MAX_CSV_ROWS:
+            df = df.head(MAX_CSV_ROWS)
 
         df.columns = [str(c).strip() for c in df.columns]
         columns = df.columns.tolist()

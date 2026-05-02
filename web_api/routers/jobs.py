@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 import json
 import sys
 import os
@@ -41,8 +41,15 @@ def _job_to_dict(j, include_analysis: bool = False) -> dict:
     return d
 
 
+VALID_STATUSES = Literal[
+    "new", "analyzed", "recommended", "resume_generated",
+    "to_apply", "applied", "screening", "interviewing",
+    "offer", "rejected", "archived",
+]
+
+
 class JobUpdateRequest(BaseModel):
-    status: Optional[str] = None
+    status: Optional[VALID_STATUSES] = None
     notes: Optional[str] = None
 
 
@@ -55,6 +62,8 @@ async def list_jobs(
     current_user: User = Depends(get_current_user),
 ):
     """获取岗位列表（分页）"""
+    page = max(1, page)
+    per_page = max(1, min(per_page, 100))
     db = get_db()
     try:
         jobs = db.get_jobs_paginated(page, per_page, status, city, user_id=current_user.id)

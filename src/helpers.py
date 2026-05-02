@@ -73,6 +73,11 @@ def load_user_profile(profile_path='config/user_profile.json'):
         return {"basic_info": {}, "skills": [], "experiences": [], "filter_preferences": {}}
 
 
+def wrap_user_input(text: str) -> str:
+    """用 XML 标签包裹用户输入，防止 LLM 提示注入"""
+    return f"<user_input>\n{text}\n</user_input>"
+
+
 def format_job_info(job, show_detail=False):
     """格式化岗位信息"""
     info = f"[{job.id}] {job.title} - {job.company}\n"

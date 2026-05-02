@@ -31,3 +31,11 @@ def get_current_user(request: Request):
         return user
     finally:
         db.close()
+
+
+def require_admin(request: Request):
+    """要求当前用户为管理员"""
+    user = get_current_user(request)
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    return user

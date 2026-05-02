@@ -2,15 +2,21 @@
 数据库管理器
 """
 import json
+import logging
 import os
 from datetime import datetime
 from sqlalchemy import create_engine, desc, text
 from sqlalchemy.orm import sessionmaker
+
+logger = logging.getLogger(__name__)
 from .models import (
     Base, User, Job, Application, EvidenceItem, JobImportBatch,
     JobAnalysis, ResumeVersion, AgentRun, AgentStep,
     CoverLetter, InterviewPrep,
 )
+
+# 引擎缓存：同一 db_path 只创建一次 engine，避免重复 DDL 检查
+_engine_cache: dict[str, any] = {}
 
 
 class DatabaseManager:
@@ -18,9 +24,14 @@ class DatabaseManager:
 
     def __init__(self, db_path: str = 'data/jobs.db'):
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
-        Base.metadata.create_all(self.engine)
-        self._migrate_sqlite_schema()
+        if db_path not in _engine_cache:
+            engine = create_engine(f'sqlite:///{db_path}', echo=False)
+            Base.metadata.create_all(engine)
+            self.engine = engine
+            self._migrate_sqlite_schema()
+            _engine_cache[db_path] = engine
+        else:
+            self.engine = _engine_cache[db_path]
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
 
@@ -41,6 +52,7 @@ class DatabaseManager:
             },
             "users": {
                 "ai_usage_count": "ALTER TABLE users ADD COLUMN ai_usage_count INTEGER DEFAULT 0",
+                "is_admin": "ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0",
             },
         }
 
@@ -72,7 +84,7 @@ class DatabaseManager:
             return user
         except Exception as e:
             self.session.rollback()
-            print(f"创建用户失败: {e}")
+            logger.error(f"创建用户失败: {e}")
             return None
 
     def get_user_by_username(self, username: str) -> User | None:
@@ -119,7 +131,7 @@ class DatabaseManager:
             return job
         except Exception as e:
             self.session.rollback()
-            print(f"添加岗位失败: {e}")
+            logger.error(f"添加岗位失败: {e}")
             return None
 
     def get_job_by_id(self, job_id: int) -> Job | None:
@@ -150,7 +162,7 @@ class DatabaseManager:
             return None
         except Exception as e:
             self.session.rollback()
-            print(f"更新岗位失败: {e}")
+            logger.error(f"更新岗位失败: {e}")
             return None
 
     def get_jobs_paginated(
@@ -180,17 +192,20 @@ class DatabaseManager:
         return query.count()
 
     def get_statistics(self, user_id: int | None = None) -> dict:
-        q = self.session.query(Job)
+        from sqlalchemy import func
+        q = self.session.query(Job.status, func.count(Job.id))
         if user_id is not None:
             q = q.filter(Job.user_id == user_id)
+        status_counts = dict(q.group_by(Job.status).all())
+        total = sum(status_counts.values())
         return {
-            'total': q.count(),
-            'new': q.filter(Job.status == 'new').count(),
-            'analyzed': q.filter(Job.status == 'analyzed').count(),
-            'recommended': q.filter(Job.status == 'recommended').count(),
-            'applied': q.filter(Job.status == 'applied').count(),
-            'interviewing': q.filter(Job.status == 'interviewing').count(),
-            'offer': q.filter(Job.status == 'offer').count(),
+            'total': total,
+            'new': status_counts.get('new', 0),
+            'analyzed': status_counts.get('analyzed', 0),
+            'recommended': status_counts.get('recommended', 0),
+            'applied': status_counts.get('applied', 0),
+            'interviewing': status_counts.get('interviewing', 0),
+            'offer': status_counts.get('offer', 0),
         }
 
     # ── Applications ─────────────────────────────────────────────────────────
@@ -206,7 +221,7 @@ class DatabaseManager:
             return application
         except Exception as e:
             self.session.rollback()
-            print(f"添加投递记录失败: {e}")
+            logger.error(f"添加投递记录失败: {e}")
             return None
 
     def get_applications(self, limit: int | None = None, user_id: int | None = None) -> list[Application]:
@@ -229,7 +244,7 @@ class DatabaseManager:
             return None
         except Exception as e:
             self.session.rollback()
-            print(f"更新投递记录失败: {e}")
+            logger.error(f"更新投递记录失败: {e}")
             return None
 
     # ── Evidence ─────────────────────────────────────────────────────────────
@@ -244,7 +259,7 @@ class DatabaseManager:
             return item
         except Exception as e:
             self.session.rollback()
-            print(f"添加证据失败: {e}")
+            logger.error(f"添加证据失败: {e}")
             return None
 
     def get_evidence_list(self, user_id: int = 1, type_filter: str | None = None) -> list[EvidenceItem]:
@@ -270,7 +285,7 @@ class DatabaseManager:
             return None
         except Exception as e:
             self.session.rollback()
-            print(f"更新证据失败: {e}")
+            logger.error(f"更新证据失败: {e}")
             return None
 
     def delete_evidence(self, evidence_id: int) -> bool:
@@ -283,7 +298,7 @@ class DatabaseManager:
             return False
         except Exception as e:
             self.session.rollback()
-            print(f"删除证据失败: {e}")
+            logger.error(f"删除证据失败: {e}")
             return False
 
     # ── Import Batches ────────────────────────────────────────────────────────
@@ -296,7 +311,7 @@ class DatabaseManager:
             return batch
         except Exception as e:
             self.session.rollback()
-            print(f"创建导入批次失败: {e}")
+            logger.error(f"创建导入批次失败: {e}")
             return None
 
     def update_import_batch(self, batch_id: int, **kwargs) -> JobImportBatch | None:
@@ -329,7 +344,7 @@ class DatabaseManager:
             return analysis
         except Exception as e:
             self.session.rollback()
-            print(f"保存分析结果失败: {e}")
+            logger.error(f"保存分析结果失败: {e}")
             return None
 
     def get_analysis_by_job(self, job_id: int) -> JobAnalysis | None:
@@ -357,7 +372,7 @@ class DatabaseManager:
             return rv
         except Exception as e:
             self.session.rollback()
-            print(f"保存简历版本失败: {e}")
+            logger.error(f"保存简历版本失败: {e}")
             return None
 
     def get_resume_versions_by_job(self, job_id: int) -> list[ResumeVersion]:
@@ -384,7 +399,7 @@ class DatabaseManager:
             return cl
         except Exception as e:
             self.session.rollback()
-            print(f"保存求职信失败: {e}")
+            logger.error(f"保存求职信失败: {e}")
             return None
 
     def get_cover_letters_by_job(self, job_id: int) -> list[CoverLetter]:
@@ -412,7 +427,7 @@ class DatabaseManager:
             return prep
         except Exception as e:
             self.session.rollback()
-            print(f"保存面试准备失败: {e}")
+            logger.error(f"保存面试准备失败: {e}")
             return None
 
     def get_interview_preps_by_job(self, job_id: int) -> list[InterviewPrep]:
@@ -438,7 +453,7 @@ class DatabaseManager:
             return run
         except Exception as e:
             self.session.rollback()
-            print(f"创建 AgentRun 失败: {e}")
+            logger.error(f"创建 AgentRun 失败: {e}")
             return None
 
     def update_agent_run(self, run_id: int, **kwargs) -> AgentRun | None:
@@ -478,7 +493,7 @@ class DatabaseManager:
             return step
         except Exception as e:
             self.session.rollback()
-            print(f"添加 AgentStep 失败: {e}")
+            logger.error(f"添加 AgentStep 失败: {e}")
             return None
 
     def update_agent_step(self, step_id: int, **kwargs) -> AgentStep | None:

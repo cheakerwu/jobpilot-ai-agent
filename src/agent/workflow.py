@@ -2,9 +2,12 @@
 轻量级 Agent 工作流状态机
 """
 import json
+import logging
 import traceback
 from datetime import datetime
 from .state import JobAgentState
+
+logger = logging.getLogger(__name__)
 
 
 class Step:
@@ -78,7 +81,8 @@ class JobAnalysisWorkflow:
                     self.db.update_agent_step(db_step.id, status="completed",
                                               finished_at=datetime.now())
             except Exception as e:
-                err = {"step": step.name, "error": str(e), "trace": traceback.format_exc()}
+                logger.error(f"Step '{step.name}' failed: {e}\n{traceback.format_exc()}")
+                err = {"step": step.name, "error": str(e)}
                 state["errors"].append(err)
                 step_record["status"] = "failed"
                 if db_step:

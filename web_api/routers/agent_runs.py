@@ -53,6 +53,7 @@ def _step_to_dict(step) -> dict:
 @router.get("")
 async def list_agent_runs(job_id: int = None, limit: int = 20, current_user: User = Depends(get_current_user)):
     """获取 Agent 运行列表"""
+    limit = max(1, min(limit, 100))
     db = get_db()
     try:
         runs = db.get_agent_runs(job_id=job_id, limit=limit, user_id=current_user.id)

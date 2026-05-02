@@ -33,7 +33,7 @@ if not _secret:
 
 SECRET_KEY = _secret
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 72  # 3 天
+ACCESS_TOKEN_EXPIRE_HOURS = 24
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:

@@ -6,8 +6,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Literal, Optional
 
 from src.storage.database import DatabaseManager
 from src.helpers import load_config
@@ -38,30 +38,52 @@ def _ev_to_dict(ev) -> dict:
     }
 
 
+EVIDENCE_TYPES = Literal[
+    "skill", "project", "work_experience", "education",
+    "achievement", "certificate", "portfolio",
+]
+
+
 class EvidenceCreateRequest(BaseModel):
-    type: str  # skill/project/work_experience/education/achievement/certificate/portfolio
-    title: str
-    content: Optional[str] = ""
-    skill_tags: Optional[list[str]] = []
+    type: EVIDENCE_TYPES
+    title: str = Field(..., min_length=1, max_length=200)
+    content: Optional[str] = Field("", max_length=10000)
+    skill_tags: Optional[list[str]] = Field(default_factory=list, max_length=20)
     source: Optional[str] = "manual"
-    confidence: Optional[float] = 0.9
+    confidence: Optional[float] = Field(0.9, ge=0.0, le=1.0)
 
 
 class EvidenceUpdateRequest(BaseModel):
-    type: Optional[str] = None
-    title: Optional[str] = None
-    content: Optional[str] = None
-    skill_tags: Optional[list[str]] = None
-    confidence: Optional[float] = None
+    type: Optional[EVIDENCE_TYPES] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    content: Optional[str] = Field(None, max_length=10000)
+    skill_tags: Optional[list[str]] = Field(None, max_length=20)
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
 
 
 @router.get("")
-async def list_evidence(type: Optional[str] = None, current_user: User = Depends(get_current_user)):
-    """获取证据列表"""
+async def list_evidence(
+    type: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 20,
+    current_user: User = Depends(get_current_user),
+):
+    """获取证据列表（分页）"""
+    page = max(1, page)
+    per_page = max(1, min(per_page, 100))
     db = get_db()
     try:
         items = db.get_evidence_list(user_id=current_user.id, type_filter=type)
-        return {"success": True, "data": [_ev_to_dict(ev) for ev in items]}
+        total = len(items)
+        start = (page - 1) * per_page
+        paged = items[start:start + per_page]
+        return {
+            "success": True,
+            "data": [_ev_to_dict(ev) for ev in paged],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+        }
     finally:
         db.close()
 
@@ -152,6 +174,8 @@ async def import_resume_pdf(file: UploadFile = File(...), current_user: User = D
             raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
         if not filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="请上传 PDF 文件")
+        if not content[:5] == b'%PDF-':
+            raise HTTPException(status_code=400, detail="文件内容不是有效的 PDF 格式")
 
         try:
             text = extract_text_from_pdf(content)

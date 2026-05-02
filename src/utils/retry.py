@@ -1,8 +1,11 @@
 """
 重试装饰器
 """
+import logging
 import time
 import functools
+
+logger = logging.getLogger(__name__)
 
 
 def retry(max_attempts=3, delay=1, backoff=2, exceptions=(Exception,)):
@@ -27,12 +30,12 @@ def retry(max_attempts=3, delay=1, backoff=2, exceptions=(Exception,)):
                 except exceptions as e:
                     last_exception = e
                     if attempt < max_attempts - 1:
-                        print(f"[WARN] attempt {attempt + 1} failed: {e}")
-                        print(f"  retrying after {current_delay}s...")
+                        logger.warning(f"attempt {attempt + 1} failed: {e}")
+                        logger.info(f"  retrying after {current_delay}s...")
                         time.sleep(current_delay)
                         current_delay *= backoff
                     else:
-                        print(f"[ERROR] failed after {max_attempts} attempts")
+                        logger.error(f"failed after {max_attempts} attempts")
 
             raise last_exception
 
@@ -55,12 +58,12 @@ def async_retry(max_attempts=3, delay=1, backoff=2, exceptions=(Exception,)):
                 except exceptions as e:
                     last_exception = e
                     if attempt < max_attempts - 1:
-                        print(f"[WARN] attempt {attempt + 1} failed: {e}")
-                        print(f"  retrying after {current_delay}s...")
+                        logger.warning(f"attempt {attempt + 1} failed: {e}")
+                        logger.info(f"  retrying after {current_delay}s...")
                         await asyncio.sleep(current_delay)
                         current_delay *= backoff
                     else:
-                        print(f"[ERROR] failed after {max_attempts} attempts")
+                        logger.error(f"failed after {max_attempts} attempts")
 
             raise last_exception
 

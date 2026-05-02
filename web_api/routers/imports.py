@@ -7,7 +7,7 @@ import hashlib
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 from src.storage.database import DatabaseManager
@@ -29,13 +29,13 @@ def get_db():
 
 
 class ManualImportRequest(BaseModel):
-    title: str
-    company: str
-    city: Optional[str] = ""
-    salary: Optional[str] = ""
-    description: str
-    requirements: Optional[str] = ""
-    url: Optional[str] = ""
+    title: str = Field(..., min_length=1, max_length=200)
+    company: str = Field(..., min_length=1, max_length=200)
+    city: Optional[str] = Field("", max_length=50)
+    salary: Optional[str] = Field("", max_length=100)
+    description: str = Field(..., min_length=1, max_length=20000)
+    requirements: Optional[str] = Field("", max_length=20000)
+    url: Optional[str] = Field("", max_length=500)
 
 
 @router.post("/manual")
@@ -157,6 +157,8 @@ async def import_pdf_jd(
             raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
         if not filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="请上传 PDF 文件")
+        if not content[:5] == b'%PDF-':
+            raise HTTPException(status_code=400, detail="文件内容不是有效的 PDF 格式")
 
         try:
             text = extract_text_from_pdf(content)

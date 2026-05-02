@@ -17,6 +17,7 @@ class User(Base):
     email = Column(String(120), unique=True, nullable=False, index=True)
     password_hash = Column(String(128), nullable=False)
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False, nullable=False)
     ai_usage_count = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -53,6 +54,7 @@ class Job(Base):
     __table_args__ = (
         Index('idx_status_city', 'status', 'city'),
         Index('idx_platform_status', 'platform', 'status'),
+        Index('idx_job_user_status', 'user_id', 'status'),
     )
 
     def __repr__(self):
@@ -105,6 +107,10 @@ class EvidenceItem(Base):
             except Exception:
                 return []
         return []
+
+    __table_args__ = (
+        Index('idx_evidence_user_type', 'user_id', 'type'),
+    )
 
     def __repr__(self):
         return f"<EvidenceItem(id={self.id}, type='{self.type}', title='{self.title}')>"

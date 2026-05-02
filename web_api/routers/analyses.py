@@ -270,51 +270,86 @@ async def analyze_job(job_id: int, use_ai: bool = True, current_user: User = Dep
 
 
 class BatchAnalyzeRequest(BaseModel):
-    job_ids: list[int]
+    job_ids: list[int] = Field(..., min_length=1, max_length=20)
     use_ai: bool = True
+
+
+def _run_batch_analysis(batch_run_id: int, job_ids: list[int], use_ai: bool, user_id: int):
+    """后台执行批量分析任务"""
+    db = get_db()
+    config = load_config()
+    try:
+        profile = _load_profile(config)
+        if use_ai:
+            analyzer = _build_analyzer(config, db)
+        else:
+            from src.analyzer.rule_based import RuleBasedAnalyzer
+            analyzer = RuleBasedAnalyzer()
+
+        results = []
+        for job_id in job_ids:
+            job = db.get_job_by_id(job_id)
+            if not job or job.user_id != user_id:
+                results.append({"job_id": job_id, "success": False, "error": "岗位不存在"})
+                continue
+            from src.agent.workflow import JobAnalysisWorkflow
+            workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile, user_id=user_id)
+            r = workflow.run(job_id)
+            if use_ai and r.get("success"):
+                analysis_data = r.get("analysis", {})
+                at = analysis_data.get("analyzer_type", "rule")
+                if at not in ("rule", "rule_fallback"):
+                    consume_ai_trial(user_id, db)
+            results.append({"job_id": job_id, "success": r.get("success"),
+                             "run_id": r.get("run_id")})
+
+        success_count = sum(1 for r in results if r.get("success"))
+        db.update_agent_run(batch_run_id,
+                            status="completed",
+                            output_json=json.dumps({
+                                "total": len(results),
+                                "success_count": success_count,
+                                "results": results,
+                            }, ensure_ascii=False))
+    except Exception as e:
+        db.update_agent_run(batch_run_id,
+                            status="failed",
+                            error_message=str(e))
+    finally:
+        db.close()
 
 
 @router.post("/batch")
 async def batch_analyze(req: BatchAnalyzeRequest, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
-    """批量分析岗位（后台执行）"""
+    """批量分析岗位（后台执行，立即返回 batch_run_id）"""
     db = get_db()
-    config = load_config()
 
     if not req.job_ids:
         raise HTTPException(status_code=400, detail="job_ids 不能为空")
 
+    job_ids = req.job_ids[:20]  # 限制单次批量
+
     if req.use_ai:
         check_ai_trial(current_user)
 
-    profile = _load_profile(config)
-    if req.use_ai:
-        analyzer = _build_analyzer(config, db)
-    else:
-        from src.analyzer.rule_based import RuleBasedAnalyzer
-        analyzer = RuleBasedAnalyzer()
-
-    results = []
-    for job_id in req.job_ids[:20]:  # 限制单次批量
-        job = db.get_job_by_id(job_id)
-        if not job or job.user_id != current_user.id:
-            results.append({"job_id": job_id, "success": False, "error": "岗位不存在"})
-            continue
-        from src.agent.workflow import JobAnalysisWorkflow
-        workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile, user_id=current_user.id)
-        r = workflow.run(job_id)
-        if req.use_ai and r.get("success"):
-            analysis_data = r.get("analysis", {})
-            at = analysis_data.get("analyzer_type", "rule")
-            if at not in ("rule", "rule_fallback"):
-                consume_ai_trial(current_user.id, db)
-        results.append({"job_id": job_id, "success": r.get("success"),
-                         "run_id": r.get("run_id")})
-
-    current_user = db.get_user_by_id(current_user.id)
+    # 创建 AgentRun 记录跟踪批次状态
+    batch_run = db.create_agent_run({
+        "user_id": current_user.id,
+        "workflow_name": "batch_analyze",
+        "status": "running",
+        "input_json": json.dumps({"job_ids": job_ids, "use_ai": req.use_ai}, ensure_ascii=False),
+    })
     db.close()
-    return {"success": True, "results": results,
-            "ai_usage_count": current_user.ai_usage_count or 0,
-            "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (current_user.ai_usage_count or 0))}
+
+    # 后台执行分析
+    background_tasks.add_task(_run_batch_analysis, batch_run.id, job_ids, req.use_ai, current_user.id)
+
+    return {
+        "success": True,
+        "message": f"批量分析已启动，共 {len(job_ids)} 个岗位",
+        "batch_run_id": batch_run.id,
+        "total": len(job_ids),
+    }
 
 
 @router.get("/{analysis_id}")

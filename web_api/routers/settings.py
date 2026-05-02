@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from src.helpers import load_config
-from src.auth.dependencies import get_current_user
+from src.auth.dependencies import get_current_user, require_admin
 from src.storage.models import User
 
 router = APIRouter()
@@ -72,6 +72,10 @@ class ModelSettingsUpdate(BaseModel):
     enable_thinking: bool = False
     base_url: str | None = ""
 
+    def model_post_init(self, __context) -> None:
+        if self.base_url and not self.base_url.startswith(("http://", "https://")):
+            raise ValueError("base_url 必须以 http:// 或 https:// 开头")
+
 
 def _provider_payload() -> list[dict]:
     providers = []
@@ -117,7 +121,7 @@ async def get_model_settings(current_user: User = Depends(get_current_user)):
 
 
 @router.patch("/models")
-async def update_model_settings(req: ModelSettingsUpdate, current_user: User = Depends(get_current_user)):
+async def update_model_settings(req: ModelSettingsUpdate, current_user: User = Depends(require_admin)):
     """更新模型配置。API Key 不通过该接口保存，只读取 .env。"""
     provider = req.provider.lower().strip()
     if provider not in PROVIDER_META:
