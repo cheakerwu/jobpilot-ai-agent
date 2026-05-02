@@ -14,6 +14,7 @@ from src.storage.database import DatabaseManager
 from src.helpers import load_config
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
+from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
 
 router = APIRouter()
 
@@ -51,6 +52,7 @@ def _rv_to_dict(rv) -> dict:
 class GenerateResumeRequest(BaseModel):
     job_id: int
     analysis_id: Optional[int] = None
+    use_ai: bool = True
 
 
 @router.post("/generate")
@@ -63,7 +65,9 @@ async def generate_resume(req: GenerateResumeRequest, current_user: User = Depen
         if not job:
             raise HTTPException(status_code=404, detail="岗位不存在")
 
-        # 获取分析结果
+        if req.use_ai:
+            check_ai_trial(current_user)
+
         analysis_obj = (
             db.get_analysis_by_id(req.analysis_id)
             if req.analysis_id
@@ -85,7 +89,6 @@ async def generate_resume(req: GenerateResumeRequest, current_user: User = Depen
             for ev in db.get_evidence_list(user_id=current_user.id)
         ]
 
-        # 读取用户 profile
         profile_path = config.get("profile_path", "config/user_profile.json")
         try:
             with open(profile_path, "r", encoding="utf-8") as f:
@@ -93,49 +96,49 @@ async def generate_resume(req: GenerateResumeRequest, current_user: User = Depen
         except Exception:
             profile = {}
 
-        # 构建 LLM provider
-        from src.resume.llm_providers import create_llm_provider
         resume_cfg = config.get("resume", {})
-        api_key_env = {
-            "claude": "ANTHROPIC_API_KEY",
-            "openai": "OPENAI_API_KEY",
-            "deepseek": "DEEPSEEK_API_KEY",
-            "qwen": "DASHSCOPE_API_KEY",
-        }
-        provider_type = resume_cfg.get("provider", "qwen")
-        api_key = os.environ.get(api_key_env.get(provider_type, ""), "")
-        provider_cfg = {
-            "model": resume_cfg.get("model", "qwen3.5-plus"),
-            "max_tokens": resume_cfg.get("max_tokens", 2000),
-            "request_timeout": resume_cfg.get("request_timeout", 90),
-        }
-        if "enable_thinking" in resume_cfg:
-            provider_cfg["enable_thinking"] = resume_cfg["enable_thinking"]
-        if "base_url" in resume_cfg:
-            provider_cfg["base_url"] = resume_cfg["base_url"]
+        generator = None
+        ai_used = False
 
-        from src.resume.generator import ResumeGenerator
-        if api_key:
-            try:
-                llm = create_llm_provider(provider_type, api_key, provider_cfg)
-                generator = ResumeGenerator(llm, resume_cfg)
-            except Exception:
-                generator = None
-        else:
-            generator = None
+        if req.use_ai:
+            from src.resume.llm_providers import create_llm_provider
+            api_key_env = {
+                "claude": "ANTHROPIC_API_KEY",
+                "openai": "OPENAI_API_KEY",
+                "deepseek": "DEEPSEEK_API_KEY",
+                "qwen": "DASHSCOPE_API_KEY",
+            }
+            provider_type = resume_cfg.get("provider", "qwen")
+            api_key = os.environ.get(api_key_env.get(provider_type, ""), "")
+            provider_cfg = {
+                "model": resume_cfg.get("model", "qwen3.5-plus"),
+                "max_tokens": resume_cfg.get("max_tokens", 2000),
+                "request_timeout": resume_cfg.get("request_timeout", 90),
+            }
+            if "enable_thinking" in resume_cfg:
+                provider_cfg["enable_thinking"] = resume_cfg["enable_thinking"]
+            if "base_url" in resume_cfg:
+                provider_cfg["base_url"] = resume_cfg["base_url"]
+
+            from src.resume.generator import ResumeGenerator
+            if api_key:
+                try:
+                    llm = create_llm_provider(provider_type, api_key, provider_cfg)
+                    generator = ResumeGenerator(llm, resume_cfg)
+                except Exception:
+                    generator = None
 
         job_dict = {"title": job.title, "company": job.company, "city": job.city,
                     "salary": job.salary, "description": job.description or ""}
 
         if generator:
             gen_result = generator.generate(job_dict, analysis, evidence, profile)
+            ai_used = True
         else:
             from src.resume.generator import ResumeGenerator as _RG
-            # fallback without LLM
             dummy = _RG.__new__(_RG)
             gen_result = dummy._fallback_generate(job_dict, analysis, evidence, profile)
 
-        # 保存简历版本
         rv = db.save_resume_version({
             "user_id": current_user.id,
             "job_id": req.job_id,
@@ -152,10 +155,15 @@ async def generate_resume(req: GenerateResumeRequest, current_user: User = Depen
         if not rv:
             raise HTTPException(status_code=500, detail="保存简历版本失败")
 
-        # 更新岗位状态
+        if ai_used:
+            consume_ai_trial(current_user.id, db)
+            current_user = db.get_user_by_id(current_user.id)
+
         db.update_job(req.job_id, status="resume_generated")
 
-        return {"success": True, "data": _rv_to_dict(rv)}
+        return {"success": True, "data": _rv_to_dict(rv),
+                "ai_usage_count": current_user.ai_usage_count or 0,
+                "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (current_user.ai_usage_count or 0))}
     finally:
         db.close()
 

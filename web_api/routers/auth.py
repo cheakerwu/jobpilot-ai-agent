@@ -14,6 +14,7 @@ from src.auth.dependencies import get_current_user
 from src.storage.database import DatabaseManager
 from src.storage.models import User
 from src.helpers import load_config
+from web_api.routers._llm_utils import AI_TRIAL_LIMIT
 
 router = APIRouter()
 
@@ -29,6 +30,8 @@ def _user_dict(user: User) -> dict:
         "username": user.username,
         "email": user.email,
         "is_active": user.is_active,
+        "ai_usage_count": user.ai_usage_count or 0,
+        "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (user.ai_usage_count or 0)),
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 

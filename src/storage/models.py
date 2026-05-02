@@ -17,6 +17,7 @@ class User(Base):
     email = Column(String(120), unique=True, nullable=False, index=True)
     password_hash = Column(String(128), nullable=False)
     is_active = Column(Boolean, default=True)
+    ai_usage_count = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
 
     def __repr__(self):

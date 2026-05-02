@@ -74,7 +74,6 @@ function switchPage(page, target) {
     if (page === "evidence") loadEvidence();
     if (page === "runs") loadRuns();
     if (page === "analytics") loadSalaryAnalytics();
-    if (page === "settings") loadModelSettings();
 }
 
 async function loadStats() {
@@ -194,14 +193,21 @@ async function loadJobs() {
 async function analyzeJob(jobId) {
     const result = document.getElementById(`job-result-${jobId}`);
     result.textContent = "Agent 正在分析...";
-    const res = await fetch(`${API_BASE}/analyses/jobs/${jobId}`, {method: "POST"});
+    const res = await fetch(`${API_BASE}/analyses/jobs/${jobId}?use_ai=${aiToggleEnabled}`, {method: "POST"});
     const data = await res.json();
+    if (res.status === 403) {
+        result.textContent = data.detail || "AI 试用次数已用完";
+        showToast("AI 试用次数已用完", "error");
+        updateTrialUI(10);
+        return;
+    }
     if (data.success) {
         const analysis = data.data;
         result.innerHTML = renderAnalysisPanel(analysis);
         const newStatus = ["A", "B"].includes(analysis.recommendation_level) ? "recommended" : "analyzed";
         updateJobCardMeta(jobId, analysis.match_score, newStatus);
         loadStats();
+        if (data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
     } else {
         result.textContent = `分析失败：${data.detail || data.message}`;
     }
@@ -225,15 +231,22 @@ async function generateResume(jobId) {
     const res = await fetch(`${API_BASE}/resumes/generate`, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({job_id: jobId}),
+        body: JSON.stringify({job_id: jobId, use_ai: aiToggleEnabled}),
     });
     const data = await res.json();
+    if (res.status === 403) {
+        result.textContent = data.detail || "AI 试用次数已用完";
+        showToast("AI 试用次数已用完", "error");
+        updateTrialUI(10);
+        return;
+    }
     result.innerHTML = data.success
         ? renderResumePanel(data.data)
         : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
     if (data.success) {
         updateJobCardMeta(jobId, null, "resume_generated");
         loadStats();
+        if (data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
     }
 }
 
@@ -533,139 +546,26 @@ async function loadRunSteps(runId) {
     `).join("");
 }
 
-let modelSettingsState = {providers: [], current: {}};
+// ── AI Trial Management ───────────────────────────────────────────────
 
-const modelLimitFields = [
-    {key: "max_tokens", inputId: "model-max-tokens", checkboxId: "model-max-tokens-unlimited", fallback: 2000},
-    {key: "rate_limit", inputId: "model-rate-limit", checkboxId: "model-rate-limit-unlimited", fallback: 10},
-    {key: "daily_limit", inputId: "model-daily-limit", checkboxId: "model-daily-limit-unlimited", fallback: 10},
-];
+const AI_TRIAL_LIMIT = 10;
+let aiToggleEnabled = true;
 
-async function loadModelSettings() {
-    const res = await fetch(`${API_BASE}/settings/models`);
-    const data = await res.json();
-    if (!data.success) return;
-    modelSettingsState = data;
+function updateTrialUI(aiUsageCount) {
+    const remaining = Math.max(0, AI_TRIAL_LIMIT - (aiUsageCount || 0));
+    const sidebarEl = document.getElementById("sidebar-trial-count");
+    const badge = document.getElementById("ai-trial-badge");
 
-    const providerSelect = document.getElementById("model-provider");
-    providerSelect.innerHTML = data.providers.map((provider) => `
-        <option value="${escapeHtml(provider.key)}">${escapeHtml(provider.label)}</option>
-    `).join("");
+    if (sidebarEl) sidebarEl.textContent = remaining;
 
-    document.getElementById("model-provider").value = data.current.provider;
-    document.getElementById("model-name").value = data.current.model || "";
-    modelLimitFields.forEach((field) => setLimitField(field, data.current[field.key]));
-    document.getElementById("model-cache-enabled").checked = Boolean(data.current.cache_enabled);
-    document.getElementById("model-enable-thinking").checked = Boolean(data.current.enable_thinking);
-    document.getElementById("model-base-url").value = data.current.base_url || "";
-    onProviderChanged();
-}
-
-function setLimitField(field, value) {
-    const input = document.getElementById(field.inputId);
-    const checkbox = document.getElementById(field.checkboxId);
-    const unlimited = value === null || value === undefined;
-
-    checkbox.checked = unlimited;
-    input.disabled = unlimited;
-    input.value = unlimited ? "" : value;
-    input.placeholder = unlimited ? "不限" : String(field.fallback);
-}
-
-function toggleLimitField(inputId) {
-    const field = modelLimitFields.find((item) => item.inputId === inputId);
-    if (!field) return;
-    const input = document.getElementById(field.inputId);
-    const checkbox = document.getElementById(field.checkboxId);
-
-    input.disabled = checkbox.checked;
-    input.placeholder = checkbox.checked ? "不限" : String(field.fallback);
-    if (checkbox.checked) {
-        input.value = "";
-    } else if (!input.value) {
-        input.value = field.fallback;
-    }
-}
-
-function readLimitField(field) {
-    const checkbox = document.getElementById(field.checkboxId);
-    if (checkbox.checked) {
-        return null;
-    }
-
-    const raw = document.getElementById(field.inputId).value.trim();
-    return raw ? Number(raw) : field.fallback;
-}
-
-function formatApiError(data) {
-    const detail = data?.detail || data?.message;
-    if (Array.isArray(detail)) {
-        return detail.map((item) => {
-            const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "";
-            const labels = {
-                max_tokens: "最大输出 Tokens",
-                rate_limit: "每分钟调用上限",
-                daily_limit: "每日调用上限",
-                provider: "模型提供商",
-                model: "模型名称",
-            };
-            const label = labels[field] || field || "配置项";
-            return `${label}：${item.msg || "填写不正确"}`;
-        }).join("；");
-    }
-    if (detail && typeof detail === "object") {
-        return JSON.stringify(detail);
-    }
-    return detail || "未知错误";
-}
-
-function getSelectedProviderMeta() {
-    const provider = document.getElementById("model-provider").value;
-    return modelSettingsState.providers.find((item) => item.key === provider) || {};
-}
-
-function onProviderChanged() {
-    const meta = getSelectedProviderMeta();
-    const datalist = document.getElementById("model-options");
-    datalist.innerHTML = (meta.models || []).map((model) => `<option value="${escapeHtml(model)}"></option>`).join("");
-
-    document.getElementById("model-thinking-wrap").classList.toggle("hidden", !meta.supports_thinking);
-    document.getElementById("model-base-url-wrap").classList.toggle("hidden", !meta.supports_base_url);
-
-    const status = meta.api_key_configured
-        ? `已检测到 ${meta.env_key}，该 provider 可调用。`
-        : `未检测到 ${meta.env_key}。保存模型选择可以生效，但调用模型前需要在 .env 中配置该变量。`;
-    document.getElementById("model-api-key-status").textContent = status;
-}
-
-async function saveModelSettings(event) {
-    event.preventDefault();
-    const result = document.getElementById("model-settings-result");
-    const payload = {
-        provider: document.getElementById("model-provider").value,
-        model: document.getElementById("model-name").value.trim(),
-        max_tokens: readLimitField(modelLimitFields[0]),
-        rate_limit: readLimitField(modelLimitFields[1]),
-        daily_limit: readLimitField(modelLimitFields[2]),
-        cache_enabled: document.getElementById("model-cache-enabled").checked,
-        enable_thinking: document.getElementById("model-enable-thinking").checked,
-        base_url: document.getElementById("model-base-url").value.trim(),
-    };
-    result.textContent = "正在保存...";
-
-    const res = await fetch(`${API_BASE}/settings/models`, {
-        method: "PATCH",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (data.success) {
-        result.textContent = "模型配置已保存";
-        showToast("模型配置已保存");
-        await loadModelSettings();
-    } else {
-        result.textContent = `保存失败：${formatApiError(data)}`;
-        showToast("保存失败", "error");
+    if (remaining <= 0) {
+        aiToggleEnabled = false;
+        if (badge) {
+            badge.className = "mb-3 px-3 py-2 bg-red-50 rounded-lg text-center";
+            badge.innerHTML = '<span class="text-xs text-red-600 font-medium">AI 试用次数已用完</span>';
+        }
+    } else if (remaining <= 3) {
+        if (badge) badge.className = "mb-3 px-3 py-2 bg-amber-50 rounded-lg text-center";
     }
 }
 
@@ -677,12 +577,19 @@ async function generateCoverLetter(jobId) {
     const res = await fetch(`${API_BASE}/cover-letters/generate`, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({job_id: jobId}),
+        body: JSON.stringify({job_id: jobId, use_ai: aiToggleEnabled}),
     });
     const data = await res.json();
+    if (res.status === 403) {
+        result.textContent = data.detail || "AI 试用次数已用完";
+        showToast("AI 试用次数已用完", "error");
+        updateTrialUI(10);
+        return;
+    }
     result.innerHTML = data.success
         ? renderCoverLetterPanel(data.data)
         : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
+    if (data.success && data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
 }
 
 function renderCoverLetterPanel(cl) {
@@ -719,12 +626,19 @@ async function generateInterviewPrep(jobId) {
     const res = await fetch(`${API_BASE}/interview-prep/generate`, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({job_id: jobId}),
+        body: JSON.stringify({job_id: jobId, use_ai: aiToggleEnabled}),
     });
     const data = await res.json();
+    if (res.status === 403) {
+        result.textContent = data.detail || "AI 试用次数已用完";
+        showToast("AI 试用次数已用完", "error");
+        updateTrialUI(10);
+        return;
+    }
     result.innerHTML = data.success
         ? renderInterviewPrepPanel(data.data)
         : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
+    if (data.success && data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
 }
 
 function renderInterviewPrepPanel(prep) {
@@ -981,11 +895,19 @@ async function kanbanDrop(event, newStatus) {
 
 // ── End Kanban ─────────────────────────────────────────────────────────
 
-window.addEventListener("load", () => {
+window.addEventListener("load", async () => {
     checkAuth();
     loadKanbanBoard();
-    // 显示当前用户名
     const user = getCurrentUser();
     const el = document.getElementById("current-username");
     if (el && user) el.textContent = user.username;
+
+    // 初始化 AI 试用状态
+    try {
+        const meRes = await fetch(`${API_BASE}/auth/me`);
+        const meData = await meRes.json();
+        if (meData.success) {
+            updateTrialUI(meData.data.ai_usage_count);
+        }
+    } catch {}
 });

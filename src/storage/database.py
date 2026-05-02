@@ -39,6 +39,9 @@ class DatabaseManager:
                 "resume_version_id": "ALTER TABLE applications ADD COLUMN resume_version_id INTEGER",
                 "feedback": "ALTER TABLE applications ADD COLUMN feedback TEXT",
             },
+            "users": {
+                "ai_usage_count": "ALTER TABLE users ADD COLUMN ai_usage_count INTEGER DEFAULT 0",
+            },
         }
 
         with self.engine.begin() as conn:
@@ -80,6 +83,31 @@ class DatabaseManager:
 
     def get_user_by_id(self, user_id: int) -> User | None:
         return self.session.query(User).filter(User.id == user_id).first()
+
+    def increment_ai_usage(self, user_id: int) -> bool:
+        try:
+            self.session.query(User).filter(User.id == user_id).update(
+                {User.ai_usage_count: User.ai_usage_count + 1}
+            )
+            self.session.commit()
+            return True
+        except Exception:
+            self.session.rollback()
+            return False
+
+    def try_consume_ai_trial(self, user_id: int, limit: int) -> bool:
+        """原子性检查并扣减：仅当 ai_usage_count < limit 时才 +1。返回是否成功。"""
+        try:
+            updated = (
+                self.session.query(User)
+                .filter(User.id == user_id, User.ai_usage_count < limit)
+                .update({User.ai_usage_count: User.ai_usage_count + 1})
+            )
+            self.session.commit()
+            return updated > 0
+        except Exception:
+            self.session.rollback()
+            return False
 
     # ── Jobs ──────────────────────────────────────────────────────────────────
 

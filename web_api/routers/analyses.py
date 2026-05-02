@@ -14,6 +14,7 @@ from src.storage.database import DatabaseManager
 from src.helpers import load_config
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
+from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
 
 router = APIRouter()
 
@@ -219,7 +220,7 @@ def _load_profile(config: dict) -> dict:
 
 
 @router.post("/jobs/{job_id}")
-async def analyze_job(job_id: int, current_user: User = Depends(get_current_user)):
+async def analyze_job(job_id: int, use_ai: bool = True, current_user: User = Depends(get_current_user)):
     """对单个岗位执行分析"""
     db = get_db()
     config = load_config()
@@ -228,8 +229,15 @@ async def analyze_job(job_id: int, current_user: User = Depends(get_current_user
         if not job:
             raise HTTPException(status_code=404, detail="岗位不存在")
 
+        if use_ai:
+            check_ai_trial(current_user)
+
         profile = _load_profile(config)
-        analyzer = _build_analyzer(config, db)
+        if use_ai:
+            analyzer = _build_analyzer(config, db)
+        else:
+            from src.analyzer.rule_based import RuleBasedAnalyzer
+            analyzer = RuleBasedAnalyzer()
 
         from src.agent.workflow import JobAnalysisWorkflow
         workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile, user_id=current_user.id)
@@ -237,8 +245,13 @@ async def analyze_job(job_id: int, current_user: User = Depends(get_current_user
 
         if result.get("success"):
             analysis_data = result.get("analysis", {})
+            analyzer_type = analysis_data.get("analyzer_type", "rule")
+            if use_ai and analyzer_type not in ("rule", "rule_fallback"):
+                consume_ai_trial(current_user.id, db)
+                current_user = db.get_user_by_id(current_user.id)
+
             analysis_data["score_explanation"] = build_score_explanation(
-                analyzer_type=analysis_data.get("analyzer_type"),
+                analyzer_type=analyzer_type,
                 match_score=analysis_data.get("match_score"),
                 risk_score=analysis_data.get("risk_score"),
                 recommendation_level=analysis_data.get("recommendation_level"),
@@ -247,7 +260,9 @@ async def analyze_job(job_id: int, current_user: User = Depends(get_current_user
                 gaps=analysis_data.get("gaps") or [],
             )
             return {"success": True, "data": analysis_data,
-                    "run_id": result.get("run_id")}
+                    "run_id": result.get("run_id"),
+                    "ai_usage_count": current_user.ai_usage_count or 0,
+                    "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (current_user.ai_usage_count or 0))}
         else:
             raise HTTPException(status_code=500, detail=result.get("error", "分析失败"))
     finally:
@@ -256,6 +271,7 @@ async def analyze_job(job_id: int, current_user: User = Depends(get_current_user
 
 class BatchAnalyzeRequest(BaseModel):
     job_ids: list[int]
+    use_ai: bool = True
 
 
 @router.post("/batch")
@@ -267,19 +283,34 @@ async def batch_analyze(req: BatchAnalyzeRequest, background_tasks: BackgroundTa
     if not req.job_ids:
         raise HTTPException(status_code=400, detail="job_ids 不能为空")
 
+    if req.use_ai:
+        check_ai_trial(current_user)
+
     profile = _load_profile(config)
-    analyzer = _build_analyzer(config, db)
+    if req.use_ai:
+        analyzer = _build_analyzer(config, db)
+    else:
+        from src.analyzer.rule_based import RuleBasedAnalyzer
+        analyzer = RuleBasedAnalyzer()
 
     results = []
     for job_id in req.job_ids[:20]:  # 限制单次批量
         from src.agent.workflow import JobAnalysisWorkflow
         workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile, user_id=current_user.id)
         r = workflow.run(job_id)
+        if req.use_ai and r.get("success"):
+            analysis_data = r.get("analysis", {})
+            at = analysis_data.get("analyzer_type", "rule")
+            if at not in ("rule", "rule_fallback"):
+                consume_ai_trial(current_user.id, db)
         results.append({"job_id": job_id, "success": r.get("success"),
                          "run_id": r.get("run_id")})
 
+    current_user = db.get_user_by_id(current_user.id)
     db.close()
-    return {"success": True, "results": results}
+    return {"success": True, "results": results,
+            "ai_usage_count": current_user.ai_usage_count or 0,
+            "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (current_user.ai_usage_count or 0))}
 
 
 @router.get("/{analysis_id}")

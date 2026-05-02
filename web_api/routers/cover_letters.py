@@ -14,6 +14,7 @@ from src.storage.database import DatabaseManager
 from src.helpers import load_config
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
+from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
 
 router = APIRouter()
 
@@ -49,6 +50,7 @@ def _cl_to_dict(cl) -> dict:
 class GenerateCoverLetterRequest(BaseModel):
     job_id: int
     analysis_id: Optional[int] = None
+    use_ai: bool = True
 
 
 @router.post("/generate")
@@ -63,6 +65,9 @@ async def generate_cover_letter(req: GenerateCoverLetterRequest, current_user: U
         job = db.get_job_by_id(req.job_id)
         if not job:
             raise HTTPException(status_code=404, detail="岗位不存在")
+
+        if req.use_ai:
+            check_ai_trial(current_user)
 
         analysis_obj = (
             db.get_analysis_by_id(req.analysis_id)
@@ -88,21 +93,22 @@ async def generate_cover_letter(req: GenerateCoverLetterRequest, current_user: U
         profile = get_profile(config)
         resume_cfg = config.get("resume", {})
 
-        llm, _ = build_llm_provider(config)
-        if llm:
-            generator = CoverLetterGenerator(llm, resume_cfg)
-            gen_result = generator.generate(
-                {"title": job.title, "company": job.company, "city": job.city,
-                 "salary": job.salary, "description": job.description or ""},
-                analysis, evidence, profile,
-            )
+        generator = None
+        ai_used = False
+        if req.use_ai:
+            llm, _ = build_llm_provider(config)
+            if llm:
+                generator = CoverLetterGenerator(llm, resume_cfg)
+
+        job_dict = {"title": job.title, "company": job.company, "city": job.city,
+                    "salary": job.salary, "description": job.description or ""}
+
+        if generator:
+            gen_result = generator.generate(job_dict, analysis, evidence, profile)
+            ai_used = True
         else:
             dummy = CoverLetterGenerator.__new__(CoverLetterGenerator)
-            gen_result = dummy._fallback_generate(
-                {"title": job.title, "company": job.company, "city": job.city,
-                 "salary": job.salary, "description": job.description or ""},
-                analysis, evidence, profile,
-            )
+            gen_result = dummy._fallback_generate(job_dict, analysis, evidence, profile)
 
         cl = db.save_cover_letter({
             "user_id": current_user.id,
@@ -118,7 +124,13 @@ async def generate_cover_letter(req: GenerateCoverLetterRequest, current_user: U
         if not cl:
             raise HTTPException(status_code=500, detail="保存求职信失败")
 
-        return {"success": True, "data": _cl_to_dict(cl)}
+        if ai_used:
+            consume_ai_trial(current_user.id, db)
+            current_user = db.get_user_by_id(current_user.id)
+
+        return {"success": True, "data": _cl_to_dict(cl),
+                "ai_usage_count": current_user.ai_usage_count or 0,
+                "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (current_user.ai_usage_count or 0))}
     finally:
         db.close()
 
