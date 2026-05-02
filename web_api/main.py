@@ -2,7 +2,8 @@
 JobPilot - 个人求职 CRM + Agent Copilot
 FastAPI Web API 主入口
 """
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +24,7 @@ else:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
-    allow_credentials=True,
+    allow_credentials="*" not in _origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -72,9 +73,21 @@ async def root(request: Request):
     return templates.TemplateResponse(request=request, name="landing.html")
 
 
+_health_bearer = HTTPBearer(auto_error=False)
+
+
 @app.get("/health")
-async def health():
-    """健康检查：返回服务状态、DB 连接、LLM 配置"""
+async def health(credentials: HTTPAuthorizationCredentials = Depends(_health_bearer)):
+    """健康检查：未认证仅返回状态，认证后返回详细信息"""
+    if not credentials:
+        return {"status": "ok"}
+
+    # 验证 token 有效性
+    from src.auth.security import decode_access_token
+    payload = decode_access_token(credentials.credentials)
+    if not payload:
+        return {"status": "ok"}
+
     from src.storage.database import DatabaseManager
     db_status = "ok"
     try:

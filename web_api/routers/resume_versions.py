@@ -40,7 +40,6 @@ def _rv_to_dict(rv) -> dict:
         "title": rv.title,
         "content": rv.content,
         "format": rv.format,
-        "file_path": rv.file_path,
         "evidence_links": _parse(rv.evidence_links_json),
         "changed_sections": _parse(rv.changed_sections_json),
         "risk_warnings": _parse(rv.risk_warnings_json),
@@ -193,7 +192,7 @@ async def get_resume_version(version_id: int, current_user: User = Depends(get_c
     db = get_db()
     try:
         rv = db.get_resume_version_by_id(version_id)
-        if not rv:
+        if not rv or rv.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="简历版本不存在")
         return {"success": True, "data": _rv_to_dict(rv)}
     finally:
@@ -205,6 +204,9 @@ async def get_job_resume_versions(job_id: int, current_user: User = Depends(get_
     """获取某岗位的所有简历版本"""
     db = get_db()
     try:
+        job = db.get_job_by_id(job_id)
+        if not job or job.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="岗位不存在")
         versions = db.get_resume_versions_by_job(job_id)
         return {"success": True, "data": [_rv_to_dict(rv) for rv in versions]}
     finally:

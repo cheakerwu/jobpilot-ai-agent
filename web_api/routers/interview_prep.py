@@ -140,6 +140,9 @@ async def get_job_interview_preps(job_id: int, current_user: User = Depends(get_
     """获取某岗位的所有面试准备"""
     db = get_db()
     try:
+        job = db.get_job_by_id(job_id)
+        if not job or job.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="岗位不存在")
         preps = db.get_interview_preps_by_job(job_id)
         return {"success": True, "data": [_prep_to_dict(p) for p in preps]}
     finally:
@@ -152,7 +155,7 @@ async def get_interview_prep(prep_id: int, current_user: User = Depends(get_curr
     db = get_db()
     try:
         prep = db.get_interview_prep_by_id(prep_id)
-        if not prep:
+        if not prep or prep.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="面试准备不存在")
         return {"success": True, "data": _prep_to_dict(prep)}
     finally:

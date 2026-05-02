@@ -140,6 +140,9 @@ async def get_job_cover_letters(job_id: int, current_user: User = Depends(get_cu
     """获取某岗位的所有求职信"""
     db = get_db()
     try:
+        job = db.get_job_by_id(job_id)
+        if not job or job.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="岗位不存在")
         letters = db.get_cover_letters_by_job(job_id)
         return {"success": True, "data": [_cl_to_dict(cl) for cl in letters]}
     finally:
@@ -152,7 +155,7 @@ async def get_cover_letter(cl_id: int, current_user: User = Depends(get_current_
     db = get_db()
     try:
         cl = db.get_cover_letter_by_id(cl_id)
-        if not cl:
+        if not cl or cl.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="求职信不存在")
         return {"success": True, "data": _cl_to_dict(cl)}
     finally:

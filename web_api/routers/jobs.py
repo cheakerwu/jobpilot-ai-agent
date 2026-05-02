@@ -158,8 +158,8 @@ async def delete_job(job_id: int, current_user: User = Depends(get_current_user)
         return {"success": True, "message": "已删除"}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="删除岗位失败")
     finally:
         db.close()

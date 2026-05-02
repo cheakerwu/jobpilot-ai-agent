@@ -62,7 +62,8 @@ class MoveJobRequest(BaseModel):
 async def move_job(job_id: int, req: MoveJobRequest, current_user: User = Depends(get_current_user)):
     """拖拽移动岗位到新状态列"""
     if req.new_status not in VALID_STATUSES:
-        raise HTTPException(status_code=400, detail=f"无效状态: {req.new_status}，可选: {VALID_STATUSES}")
+        status_names = "、".join(VALID_STATUSES)
+        raise HTTPException(status_code=400, detail=f"无效状态: {req.new_status}，可选: {status_names}")
     db = get_db()
     try:
         job = db.get_job_by_id(job_id)

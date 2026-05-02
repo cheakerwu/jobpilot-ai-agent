@@ -2,6 +2,7 @@
 密码哈希 + JWT 工具
 """
 import os
+import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -24,9 +25,11 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ── JWT ───────────────────────────────────────────────────────────────────────
 _secret = os.environ.get("JOBPILOT_SECRET_KEY")
 if not _secret:
-    import secrets
-    _secret = secrets.token_hex(32)
-    logger.warning("JOBPILOT_SECRET_KEY 未设置，使用随机密钥（重启后 token 失效）。生产环境请设置固定密钥。")
+    # 生成确定性回退密钥（同一机器重启后不变），避免 token 失效
+    import platform
+    fallback_seed = f"jobpilot-{platform.node()}-fallback".encode()
+    _secret = hashlib.sha256(fallback_seed).hexdigest()
+    logger.warning("JOBPILOT_SECRET_KEY 未设置，使用机器绑定的回退密钥。生产环境请设置固定密钥。")
 
 SECRET_KEY = _secret
 ALGORITHM = "HS256"

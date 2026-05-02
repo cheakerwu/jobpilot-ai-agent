@@ -17,6 +17,8 @@ from src.storage.models import User
 
 router = APIRouter()
 
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+
 
 def get_db():
     config = load_config()
@@ -133,8 +135,8 @@ async def init_evidence_from_profile(current_user: User = Depends(get_current_us
         from src.storage.init_evidence import init_evidence_from_profile as _init
         count = _init(user_id=current_user.id)
         return {"success": True, "message": f"初始化完成，导入 {count} 条证据"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="初始化证据库失败")
 
 
 @router.post("/import-resume-pdf")
@@ -146,13 +148,15 @@ async def import_resume_pdf(file: UploadFile = File(...), current_user: User = D
         content = await file.read()
         if not content:
             raise HTTPException(status_code=400, detail="文件为空")
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
         if not filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="请上传 PDF 文件")
 
         try:
             text = extract_text_from_pdf(content)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"PDF 解析失败: {e}")
+        except Exception:
+            raise HTTPException(status_code=400, detail="PDF 解析失败，请确认文件格式正确")
         if len(text) < 20:
             raise HTTPException(status_code=400, detail="未能从 PDF 中识别到足够文本")
 
@@ -172,7 +176,6 @@ async def import_resume_pdf(file: UploadFile = File(...), current_user: User = D
             "message": f"已从 PDF 简历导入 {len(saved)} 条证据",
             "count": len(saved),
             "data": saved,
-            "text_preview": text[:500],
         }
     finally:
         db.close()

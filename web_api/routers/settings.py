@@ -6,12 +6,14 @@ import sys
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from src.helpers import load_config
+from src.auth.dependencies import get_current_user
+from src.storage.models import User
 
 router = APIRouter()
 
@@ -88,7 +90,7 @@ def _provider_payload() -> list[dict]:
 
 
 @router.get("/models")
-async def get_model_settings():
+async def get_model_settings(current_user: User = Depends(get_current_user)):
     """读取当前模型配置和可选 provider/model 列表。"""
     config = load_config()
     resume_cfg = config.get("resume", {})
@@ -115,7 +117,7 @@ async def get_model_settings():
 
 
 @router.patch("/models")
-async def update_model_settings(req: ModelSettingsUpdate):
+async def update_model_settings(req: ModelSettingsUpdate, current_user: User = Depends(get_current_user)):
     """更新模型配置。API Key 不通过该接口保存，只读取 .env。"""
     provider = req.provider.lower().strip()
     if provider not in PROVIDER_META:
@@ -144,8 +146,8 @@ async def update_model_settings(req: ModelSettingsUpdate):
     try:
         with CONFIG_PATH.open("w", encoding="utf-8") as f:
             yaml.safe_dump(config, f, allow_unicode=True, sort_keys=False)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"保存配置失败: {e}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="保存配置失败，请检查服务器日志")
 
     return {
         "success": True,

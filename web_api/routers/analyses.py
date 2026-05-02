@@ -226,7 +226,7 @@ async def analyze_job(job_id: int, use_ai: bool = True, current_user: User = Dep
     config = load_config()
     try:
         job = db.get_job_by_id(job_id)
-        if not job:
+        if not job or job.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="岗位不存在")
 
         if use_ai:
@@ -295,6 +295,10 @@ async def batch_analyze(req: BatchAnalyzeRequest, background_tasks: BackgroundTa
 
     results = []
     for job_id in req.job_ids[:20]:  # 限制单次批量
+        job = db.get_job_by_id(job_id)
+        if not job or job.user_id != current_user.id:
+            results.append({"job_id": job_id, "success": False, "error": "岗位不存在"})
+            continue
         from src.agent.workflow import JobAnalysisWorkflow
         workflow = JobAnalysisWorkflow(db=db, analyzer=analyzer, profile=profile, user_id=current_user.id)
         r = workflow.run(job_id)
@@ -321,6 +325,9 @@ async def get_analysis(analysis_id: int, current_user: User = Depends(get_curren
         a = db.get_analysis_by_id(analysis_id)
         if not a:
             raise HTTPException(status_code=404, detail="分析结果不存在")
+        job = db.get_job_by_id(a.job_id)
+        if not job or job.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="分析结果不存在")
         return {"success": True, "data": _analysis_to_dict(a)}
     finally:
         db.close()
@@ -331,6 +338,9 @@ async def get_job_analysis(job_id: int, current_user: User = Depends(get_current
     """获取岗位最新分析结果"""
     db = get_db()
     try:
+        job = db.get_job_by_id(job_id)
+        if not job or job.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="岗位不存在")
         a = db.get_analysis_by_job(job_id)
         if not a:
             raise HTTPException(status_code=404, detail="该岗位尚未分析")

@@ -10,6 +10,7 @@ function getCurrentUser() {
 }
 
 function logout() {
+    if (!confirm("确定要退出登录吗？")) return;
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     window.location.href = "/login";
@@ -53,6 +54,17 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
+const ANALYZER_LABELS = {
+    hybrid: "AI + 规则混合",
+    llm: "AI 深度分析",
+    rule: "规则评分",
+    rule_fallback: "规则评分",
+};
+
+function formatAnalyzerType(type) {
+    return ANALYZER_LABELS[type] || type || "-";
+}
+
 function showToast(message, type = "success") {
     const colors = { success: "bg-emerald-600", error: "bg-red-600", info: "bg-indigo-600" };
     const icons = { success: "solar:check-circle-bold", error: "solar:close-circle-bold", info: "solar:info-circle-bold" };
@@ -68,6 +80,13 @@ function switchPage(page, target) {
     document.getElementById(`page-${page}`).classList.remove("hidden");
     document.querySelectorAll(".nav-item").forEach((el) => el.classList.remove("nav-active"));
     if (target) target.classList.add("nav-active");
+
+    // 离开分析页时销毁图表，防止 canvas 冲突
+    if (document.getElementById("page-analytics")?.classList.contains("hidden") === false && page !== "analytics") {
+        destroyChart("distribution");
+        destroyChart("city");
+        destroyChart("platform");
+    }
 
     if (page === "jobs") loadJobs();
     if (page === "kanban") loadKanbanBoard();
@@ -154,17 +173,21 @@ async function importJdPdf(event) {
     }
 }
 
-async function loadJobs() {
+let jobsCurrentPage = 1;
+const JOBS_PER_PAGE = 20;
+
+async function loadJobs(page) {
+    if (page !== undefined) jobsCurrentPage = page;
     const container = document.getElementById("jobs-list");
     container.innerHTML = "<div class='text-sm text-slate-500'>加载中...</div>";
-    const res = await fetch(`${API_BASE}/jobs?per_page=50`);
+    const res = await fetch(`${API_BASE}/jobs?page=${jobsCurrentPage}&per_page=${JOBS_PER_PAGE}`);
     const data = await res.json();
     if (!data.success || data.data.length === 0) {
         container.innerHTML = "<div class='card p-5 text-sm text-slate-500'>暂无岗位，先导入一条 JD。</div>";
         return;
     }
 
-    container.innerHTML = data.data.map((job) => `
+    const jobsHtml = data.data.map((job) => `
         <article class="card p-5">
             <div class="flex items-start justify-between gap-4">
                 <div class="min-w-0 flex-1">
@@ -188,28 +211,62 @@ async function loadJobs() {
             <div id="job-result-${job.id}" class="text-sm mt-3 text-slate-600"></div>
         </article>
     `).join("");
+
+    const totalPages = Math.ceil((data.total || 0) / JOBS_PER_PAGE);
+    let paginationHtml = "";
+    if (totalPages > 1) {
+        paginationHtml = `<div class="flex items-center justify-center gap-2 mt-4 py-3">`;
+        if (jobsCurrentPage > 1) {
+            paginationHtml += `<button class="btn btn-secondary text-xs" onclick="loadJobs(${jobsCurrentPage - 1})">上一页</button>`;
+        }
+        paginationHtml += `<span class="text-sm text-slate-500">第 ${jobsCurrentPage} / ${totalPages} 页（共 ${data.total} 条）</span>`;
+        if (jobsCurrentPage < totalPages) {
+            paginationHtml += `<button class="btn btn-secondary text-xs" onclick="loadJobs(${jobsCurrentPage + 1})">下一页</button>`;
+        }
+        paginationHtml += `</div>`;
+    }
+
+    container.innerHTML = jobsHtml + paginationHtml;
+}
+
+const SPINNER = '<iconify-icon icon="solar:spinner-bold-duotone" class="animate-spin"></iconify-icon>';
+
+function setJobButtonsLoading(jobId, loading) {
+    const container = document.querySelector(`#job-result-${jobId}`)?.closest("article");
+    if (!container) return;
+    const buttons = container.querySelectorAll(".btn");
+    buttons.forEach((btn) => {
+        btn.disabled = loading;
+        btn.style.opacity = loading ? "0.5" : "";
+        btn.style.pointerEvents = loading ? "none" : "";
+    });
 }
 
 async function analyzeJob(jobId) {
     const result = document.getElementById(`job-result-${jobId}`);
-    result.textContent = "Agent 正在分析...";
-    const res = await fetch(`${API_BASE}/analyses/jobs/${jobId}?use_ai=${aiToggleEnabled}`, {method: "POST"});
-    const data = await res.json();
-    if (res.status === 403) {
-        result.textContent = data.detail || "AI 试用次数已用完";
-        showToast("AI 试用次数已用完", "error");
-        updateTrialUI(10);
-        return;
-    }
-    if (data.success) {
-        const analysis = data.data;
-        result.innerHTML = renderAnalysisPanel(analysis);
-        const newStatus = ["A", "B"].includes(analysis.recommendation_level) ? "recommended" : "analyzed";
-        updateJobCardMeta(jobId, analysis.match_score, newStatus);
-        loadStats();
-        if (data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
-    } else {
-        result.textContent = `分析失败：${data.detail || data.message}`;
+    setJobButtonsLoading(jobId, true);
+    result.innerHTML = `${SPINNER} Agent 正在分析...`;
+    try {
+        const res = await fetch(`${API_BASE}/analyses/jobs/${jobId}?use_ai=${aiToggleEnabled}`, {method: "POST"});
+        const data = await res.json();
+        if (res.status === 403) {
+            result.textContent = data.detail || "AI 试用次数已用完";
+            showToast("AI 试用次数已用完", "error");
+            updateTrialUI(10);
+            return;
+        }
+        if (data.success) {
+            const analysis = data.data;
+            result.innerHTML = renderAnalysisPanel(analysis);
+            const newStatus = ["A", "B"].includes(analysis.recommendation_level) ? "recommended" : "analyzed";
+            updateJobCardMeta(jobId, analysis.match_score, newStatus);
+            loadStats();
+            if (data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
+        } else {
+            result.textContent = `分析失败：${data.detail || data.message}`;
+        }
+    } finally {
+        setJobButtonsLoading(jobId, false);
     }
 }
 
@@ -227,26 +284,31 @@ async function showAnalysis(jobId) {
 
 async function generateResume(jobId) {
     const result = document.getElementById(`job-result-${jobId}`);
-    result.textContent = "正在生成简历版本...";
-    const res = await fetch(`${API_BASE}/resumes/generate`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({job_id: jobId, use_ai: aiToggleEnabled}),
-    });
-    const data = await res.json();
-    if (res.status === 403) {
-        result.textContent = data.detail || "AI 试用次数已用完";
-        showToast("AI 试用次数已用完", "error");
-        updateTrialUI(10);
-        return;
-    }
-    result.innerHTML = data.success
-        ? renderResumePanel(data.data)
-        : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
-    if (data.success) {
-        updateJobCardMeta(jobId, null, "resume_generated");
-        loadStats();
-        if (data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
+    setJobButtonsLoading(jobId, true);
+    result.innerHTML = `${SPINNER} 正在生成简历版本...`;
+    try {
+        const res = await fetch(`${API_BASE}/resumes/generate`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({job_id: jobId, use_ai: aiToggleEnabled}),
+        });
+        const data = await res.json();
+        if (res.status === 403) {
+            result.textContent = data.detail || "AI 试用次数已用完";
+            showToast("AI 试用次数已用完", "error");
+            updateTrialUI(10);
+            return;
+        }
+        result.innerHTML = data.success
+            ? renderResumePanel(data.data)
+            : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
+        if (data.success) {
+            updateJobCardMeta(jobId, null, "resume_generated");
+            loadStats();
+            if (data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
+        }
+    } finally {
+        setJobButtonsLoading(jobId, false);
     }
 }
 
@@ -291,7 +353,7 @@ function renderAnalysisPanel(analysis) {
                 <div class="bg-slate-50 rounded-xl p-3"><div class="text-xs text-slate-500">推荐等级</div><div class="text-xl font-bold mt-1">${escapeHtml(analysis.recommendation_level || "-")}</div></div>
                 <div class="bg-indigo-50 rounded-xl p-3"><div class="text-xs text-indigo-600">匹配分</div><div class="text-xl font-bold mt-1 text-indigo-700">${analysis.match_score ?? "-"}</div></div>
                 <div class="bg-amber-50 rounded-xl p-3"><div class="text-xs text-amber-600">风险分</div><div class="text-xl font-bold mt-1 text-amber-700">${analysis.risk_score ?? "-"}</div></div>
-                <div class="bg-slate-50 rounded-xl p-3"><div class="text-xs text-slate-500">分析器</div><div class="text-xl font-bold mt-1">${escapeHtml(analysis.analyzer_type || "-")}</div></div>
+                <div class="bg-slate-50 rounded-xl p-3"><div class="text-xs text-slate-500">分析器</div><div class="text-xl font-bold mt-1">${escapeHtml(formatAnalyzerType(analysis.analyzer_type))}</div></div>
             </div>
             <div>
                 <div class="font-semibold text-slate-800">匹配结论</div>
@@ -422,6 +484,7 @@ async function copyResumeContent(versionId) {
     const el = document.getElementById(`resume-content-${versionId}`);
     if (!el) return;
     await navigator.clipboard.writeText(el.innerText);
+    showToast("已复制到剪贴板");
 }
 
 async function loadEvidence() {
@@ -430,7 +493,7 @@ async function loadEvidence() {
     const res = await fetch(`${API_BASE}/evidence`);
     const data = await res.json();
     if (!data.success || data.data.length === 0) {
-        container.innerHTML = "<div class='card p-5 text-sm text-slate-500'>暂无证据，可以手动新增或调用 /api/evidence/init 初始化。</div>";
+        container.innerHTML = "<div class='card p-5 text-sm text-slate-500'>暂无证据，点击上方按钮手动新增。</div>";
         return;
     }
     container.innerHTML = data.data.map((ev) => `
@@ -487,15 +550,22 @@ async function createEvidence(event) {
     if (data.success) {
         form.reset();
         loadEvidence();
+        showToast("证据已保存");
     } else {
-        alert(data.detail || data.message || "保存失败");
+        showToast(data.detail || data.message || "保存失败", "error");
     }
 }
 
 async function deleteEvidence(id) {
+    if (!confirm("确定要删除这条证据吗？")) return;
     const res = await fetch(`${API_BASE}/evidence/${id}`, {method: "DELETE"});
     const data = await res.json();
-    if (data.success) loadEvidence();
+    if (data.success) {
+        loadEvidence();
+        showToast("证据已删除");
+    } else {
+        showToast(data.detail || data.message || "删除失败", "error");
+    }
 }
 
 async function loadRuns() {
@@ -573,23 +643,28 @@ function updateTrialUI(aiUsageCount) {
 
 async function generateCoverLetter(jobId) {
     const result = document.getElementById(`job-result-${jobId}`);
-    result.textContent = "正在生成 Cover Letter...";
-    const res = await fetch(`${API_BASE}/cover-letters/generate`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({job_id: jobId, use_ai: aiToggleEnabled}),
-    });
-    const data = await res.json();
-    if (res.status === 403) {
-        result.textContent = data.detail || "AI 试用次数已用完";
-        showToast("AI 试用次数已用完", "error");
-        updateTrialUI(10);
-        return;
+    setJobButtonsLoading(jobId, true);
+    result.innerHTML = `${SPINNER} 正在生成 Cover Letter...`;
+    try {
+        const res = await fetch(`${API_BASE}/cover-letters/generate`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({job_id: jobId, use_ai: aiToggleEnabled}),
+        });
+        const data = await res.json();
+        if (res.status === 403) {
+            result.textContent = data.detail || "AI 试用次数已用完";
+            showToast("AI 试用次数已用完", "error");
+            updateTrialUI(10);
+            return;
+        }
+        result.innerHTML = data.success
+            ? renderCoverLetterPanel(data.data)
+            : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
+        if (data.success && data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
+    } finally {
+        setJobButtonsLoading(jobId, false);
     }
-    result.innerHTML = data.success
-        ? renderCoverLetterPanel(data.data)
-        : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
-    if (data.success && data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
 }
 
 function renderCoverLetterPanel(cl) {
@@ -618,27 +693,33 @@ async function copyCoverLetterContent(clId) {
     const el = document.getElementById(`cover-letter-content-${clId}`);
     if (!el) return;
     await navigator.clipboard.writeText(el.innerText);
+    showToast("已复制到剪贴板");
 }
 
 async function generateInterviewPrep(jobId) {
     const result = document.getElementById(`job-result-${jobId}`);
-    result.textContent = "正在生成面试准备材料...";
-    const res = await fetch(`${API_BASE}/interview-prep/generate`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({job_id: jobId, use_ai: aiToggleEnabled}),
-    });
-    const data = await res.json();
-    if (res.status === 403) {
-        result.textContent = data.detail || "AI 试用次数已用完";
-        showToast("AI 试用次数已用完", "error");
-        updateTrialUI(10);
-        return;
+    setJobButtonsLoading(jobId, true);
+    result.innerHTML = `${SPINNER} 正在生成面试准备材料...`;
+    try {
+        const res = await fetch(`${API_BASE}/interview-prep/generate`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({job_id: jobId, use_ai: aiToggleEnabled}),
+        });
+        const data = await res.json();
+        if (res.status === 403) {
+            result.textContent = data.detail || "AI 试用次数已用完";
+            showToast("AI 试用次数已用完", "error");
+            updateTrialUI(10);
+            return;
+        }
+        result.innerHTML = data.success
+            ? renderInterviewPrepPanel(data.data)
+            : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
+        if (data.success && data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
+    } finally {
+        setJobButtonsLoading(jobId, false);
     }
-    result.innerHTML = data.success
-        ? renderInterviewPrepPanel(data.data)
-        : `<div class="text-red-600">生成失败：${escapeHtml(data.detail || data.message)}</div>`;
-    if (data.success && data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
 }
 
 function renderInterviewPrepPanel(prep) {

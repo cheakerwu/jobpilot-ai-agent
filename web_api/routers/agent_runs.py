@@ -26,7 +26,6 @@ def _run_to_dict(run) -> dict:
         "job_id": run.job_id,
         "workflow_name": run.workflow_name,
         "status": run.status,
-        "error_message": run.error_message,
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "finished_at": run.finished_at.isoformat() if run.finished_at else None,
     }
@@ -46,7 +45,6 @@ def _step_to_dict(step) -> dict:
         "step_name": step.step_name,
         "status": step.status,
         "output": _parse(step.output_json),
-        "error_message": step.error_message,
         "started_at": step.started_at.isoformat() if step.started_at else None,
         "finished_at": step.finished_at.isoformat() if step.finished_at else None,
     }
@@ -69,7 +67,7 @@ async def get_agent_run(run_id: int, current_user: User = Depends(get_current_us
     db = get_db()
     try:
         run = db.get_agent_run(run_id)
-        if not run:
+        if not run or run.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="运行记录不存在")
         data = _run_to_dict(run)
         data["output"] = json.loads(run.output_json) if run.output_json else None
@@ -84,7 +82,7 @@ async def get_agent_run_steps(run_id: int, current_user: User = Depends(get_curr
     db = get_db()
     try:
         run = db.get_agent_run(run_id)
-        if not run:
+        if not run or run.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="运行记录不存在")
         return {"success": True, "data": [_step_to_dict(s) for s in run.steps]}
     finally:

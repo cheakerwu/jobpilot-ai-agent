@@ -3,9 +3,11 @@
 """
 import sys
 import os
+import time
+from collections import defaultdict
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
@@ -17,6 +19,23 @@ from src.helpers import load_config
 from web_api.routers._llm_utils import AI_TRIAL_LIMIT
 
 router = APIRouter()
+
+# ── 简易内存限流器 ────────────────────────────────────────────────────────────
+_rate_limit_store: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_rate_limit(request: Request, key: str, max_requests: int, window_seconds: int):
+    """检查 IP+key 是否超过限流。超过则抛 429。"""
+    client_ip = request.client.host if request.client else "unknown"
+    store_key = f"{client_ip}:{key}"
+    now = time.time()
+    # 清理过期记录
+    _rate_limit_store[store_key] = [
+        t for t in _rate_limit_store[store_key] if now - t < window_seconds
+    ]
+    if len(_rate_limit_store[store_key]) >= max_requests:
+        raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
+    _rate_limit_store[store_key].append(now)
 
 
 def get_db():
@@ -53,8 +72,9 @@ class PasswordRequest(BaseModel):
 
 
 @router.post("/register")
-async def register(req: RegisterRequest):
+async def register(req: RegisterRequest, request: Request):
     """注册新用户"""
+    _check_rate_limit(request, "register", max_requests=3, window_seconds=60)
     if len(req.username) < 2 or len(req.username) > 50:
         raise HTTPException(status_code=400, detail="用户名长度 2-50 个字符")
     if len(req.password) < 6:
@@ -82,8 +102,9 @@ async def register(req: RegisterRequest):
 
 
 @router.post("/login")
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, request: Request):
     """用户登录"""
+    _check_rate_limit(request, "login", max_requests=5, window_seconds=60)
     db = get_db()
     try:
         user = db.get_user_by_username(req.username)

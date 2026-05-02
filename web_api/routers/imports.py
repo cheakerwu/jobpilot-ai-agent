@@ -20,6 +20,8 @@ from src.storage.models import User
 
 router = APIRouter()
 
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+
 
 def get_db():
     config = load_config()
@@ -84,6 +86,8 @@ async def import_csv(file: UploadFile = File(...), current_user: User = Depends(
         content = await file.read()
         if not content:
             raise HTTPException(status_code=400, detail="文件为空")
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
 
         source = CsvJobSource()
         success_count = 0
@@ -149,13 +153,15 @@ async def import_pdf_jd(
         content = await file.read()
         if not content:
             raise HTTPException(status_code=400, detail="文件为空")
+        if len(content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
         if not filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="请上传 PDF 文件")
 
         try:
             text = extract_text_from_pdf(content)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"PDF 解析失败: {e}")
+        except Exception:
+            raise HTTPException(status_code=400, detail="PDF 解析失败，请确认文件格式正确")
         if len(text) < 20:
             raise HTTPException(status_code=400, detail="未能从 PDF 中识别到足够文本")
 
@@ -213,7 +219,6 @@ async def import_pdf_jd(
                 "city": job.city,
                 "salary": job.salary,
             },
-            "text_preview": text[:500],
         }
     finally:
         db.close()
@@ -225,7 +230,7 @@ async def get_batch(batch_id: int, current_user: User = Depends(get_current_user
     db = get_db()
     try:
         batch = db.get_import_batch(batch_id)
-        if not batch:
+        if not batch or batch.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="批次不存在")
         return {
             "success": True,
