@@ -7,7 +7,7 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 from src.storage.database import DatabaseManager
