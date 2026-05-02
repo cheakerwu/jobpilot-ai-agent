@@ -79,7 +79,7 @@ class PasswordRequest(BaseModel):
 @router.post("/register")
 async def register(req: RegisterRequest, request: Request):
     """注册新用户"""
-    _check_rate_limit(request, "register", max_requests=3, window_seconds=60)
+    _check_rate_limit(request, f"register:{req.username}", max_requests=3, window_seconds=60)
     if not _USERNAME_RE.match(req.username):
         raise HTTPException(status_code=400, detail="用户名只能包含字母、数字、下划线和中文，长度 2-20")
 
@@ -107,11 +107,11 @@ async def register(req: RegisterRequest, request: Request):
 @router.post("/login")
 async def login(req: LoginRequest, request: Request):
     """用户登录"""
-    _check_rate_limit(request, "login", max_requests=5, window_seconds=60)
     db = get_db()
     try:
         user = db.get_user_by_username(req.username)
         if not user or not verify_password(req.password, user.password_hash):
+            _check_rate_limit(request, f"login:{req.username}", max_requests=5, window_seconds=60)
             raise HTTPException(status_code=401, detail="用户名或密码错误")
         if not user.is_active:
             raise HTTPException(status_code=403, detail="账号已被禁用")

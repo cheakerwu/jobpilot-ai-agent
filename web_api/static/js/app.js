@@ -95,6 +95,69 @@ function switchPage(page, target) {
     if (page === "analytics") loadSalaryAnalytics();
 }
 
+function goToPage(page) {
+    const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+    switchPage(page, navItem);
+}
+
+async function loadOnboardingStatus() {
+    const panel = document.getElementById("onboarding-panel");
+    if (!panel) return;
+    try {
+        const res = await fetch(`${API_BASE}/onboarding/status`);
+        const data = await res.json();
+        if (!data.success) return;
+        renderOnboardingPanel(data.data);
+    } catch {}
+}
+
+function renderOnboardingPanel(status) {
+    const panel = document.getElementById("onboarding-panel");
+    if (!panel) return;
+    const progress = Array.isArray(status.progress) ? status.progress : [];
+    const next = status.next_step || {};
+    const activeKey = next.key;
+
+    if (status.is_complete) {
+        panel.classList.add("hidden");
+        panel.innerHTML = "";
+        return;
+    }
+
+    panel.className = "mb-6 bg-white border border-slate-200 rounded-xl p-5";
+    panel.innerHTML = `
+        <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+            <div class="min-w-0">
+                <div class="text-sm font-bold text-slate-900">当前进度</div>
+                <div class="text-sm text-slate-500 mt-1">${escapeHtml(next.description || "")}</div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 xl:w-[520px]">
+                ${progress.map((item) => {
+                    const active = item.key === activeKey;
+                    const done = item.completed;
+                    const cls = done
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                        : active
+                            ? "bg-indigo-50 text-indigo-700 border-indigo-100"
+                            : "bg-slate-50 text-slate-500 border-slate-100";
+                    const icon = done ? "solar:check-circle-bold" : active ? "solar:play-circle-bold" : "solar:clock-circle-bold";
+                    return `
+                        <div class="border rounded-lg px-3 py-2 ${cls}">
+                            <div class="flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap">
+                                <iconify-icon icon="${icon}" width="14"></iconify-icon>${escapeHtml(item.label)}
+                            </div>
+                            <div class="text-lg font-bold mt-1">${item.count ?? 0}</div>
+                        </div>
+                    `;
+                }).join("")}
+            </div>
+            <button class="btn btn-primary justify-center xl:shrink-0" onclick="goToPage('${escapeHtml(next.action_page || "jobs")}')">
+                <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>${escapeHtml(next.action_label || "继续")}
+            </button>
+        </div>
+    `;
+}
+
 async function loadStats() {
     const el = document.getElementById("stat-total");
     if (!el) return;
@@ -127,6 +190,7 @@ async function importManual(event) {
         showToast(`已导入：${data.job.title}`);
         form.reset();
         loadStats();
+        loadOnboardingStatus();
     } else {
         result.textContent = `导入失败：${data.message || data.detail}`;
         showToast(data.message || data.detail || "导入失败", "error");
@@ -147,6 +211,7 @@ async function importCsv(event) {
         showToast(`批量导入完成：${data.success_count} 条`);
         form.reset();
         loadStats();
+        loadOnboardingStatus();
     } else {
         result.textContent = `导入失败：${data.message || data.detail}`;
         showToast(data.message || data.detail || "导入失败", "error");
@@ -167,6 +232,7 @@ async function importJdPdf(event) {
         showToast(`已导入：${data.job.title}`);
         form.reset();
         loadStats();
+        loadOnboardingStatus();
     } else {
         result.textContent = `导入失败：${data.detail || data.message}`;
         showToast(data.detail || data.message || "导入失败", "error");
@@ -175,6 +241,44 @@ async function importJdPdf(event) {
 
 let jobsCurrentPage = 1;
 const JOBS_PER_PAGE = 20;
+
+function getJobNextAction(job) {
+    const status = job.status || "new";
+    if (status === "new") {
+        return {key: "analyze", label: "分析岗位", hint: "先看匹配与风险", icon: "solar:magic-stick-3-bold-duotone", handler: `analyzeJob(${job.id})`};
+    }
+    if (["analyzed", "recommended"].includes(status)) {
+        return {key: "resume", label: "生成简历", hint: "产出定制版本", icon: "solar:document-text-bold-duotone", handler: `generateResume(${job.id})`};
+    }
+    if (status === "resume_generated") {
+        return {key: "versions", label: "查看简历", hint: "复制或下载版本", icon: "solar:documents-bold-duotone", handler: `showResumeVersions(${job.id})`};
+    }
+    if (["to_apply", "applied", "screening"].includes(status)) {
+        return {key: "cover", label: "生成求职信", hint: "补齐投递材料", icon: "solar:letter-bold-duotone", handler: `generateCoverLetter(${job.id})`};
+    }
+    if (status === "interviewing") {
+        return {key: "prep", label: "面试准备", hint: "准备问题与回答", icon: "solar:notebook-bold-duotone", handler: `generateInterviewPrep(${job.id})`};
+    }
+    return {key: "analysis", label: "查看详情", hint: "回看匹配结论", icon: "solar:chart-2-bold-duotone", handler: `showAnalysis(${job.id})`};
+}
+
+function renderJobActionButtons(job, nextAction) {
+    const actions = [
+        {key: "analyze", label: "重析", icon: "solar:magic-stick-3-bold-duotone", handler: `analyzeJob(${job.id})`},
+        {key: "analysis", label: "详情", icon: "solar:chart-2-bold-duotone", handler: `showAnalysis(${job.id})`},
+        {key: "resume", label: "简历", icon: "solar:document-text-bold-duotone", handler: `generateResume(${job.id})`},
+        {key: "versions", label: "版本", icon: "solar:documents-bold-duotone", handler: `showResumeVersions(${job.id})`},
+        {key: "cover", label: "求职信", icon: "solar:letter-bold-duotone", handler: `generateCoverLetter(${job.id})`},
+        {key: "prep", label: "面试", icon: "solar:notebook-bold-duotone", handler: `generateInterviewPrep(${job.id})`},
+    ].filter((action) => action.key !== nextAction.key);
+
+    return `
+        <button class="btn btn-primary" onclick="${nextAction.handler}"><iconify-icon icon="${nextAction.icon}"></iconify-icon>${escapeHtml(nextAction.label)}</button>
+        ${actions.map((action) => `
+            <button class="btn btn-secondary" onclick="${action.handler}"><iconify-icon icon="${action.icon}"></iconify-icon>${escapeHtml(action.label)}</button>
+        `).join("")}
+    `;
+}
 
 async function loadJobs(page) {
     if (page !== undefined) jobsCurrentPage = page;
@@ -187,9 +291,11 @@ async function loadJobs(page) {
         return;
     }
 
-    const jobsHtml = data.data.map((job) => `
+    const jobsHtml = data.data.map((job) => {
+        const nextAction = getJobNextAction(job);
+        return `
         <article class="card p-5">
-            <div class="flex items-start justify-between gap-4">
+            <div class="job-card-top flex items-start justify-between gap-4">
                 <div class="min-w-0 flex-1">
                     <h3 class="font-bold text-sm">${escapeHtml(job.title)}</h3>
                     <p class="text-xs text-slate-500 mt-1">${escapeHtml(job.company)} · ${escapeHtml(job.city || "未知城市")} · ${escapeHtml(job.salary || "薪资未填")}</p>
@@ -198,19 +304,19 @@ async function loadJobs(page) {
                         状态：<span id="job-status-${job.id}" class="font-medium">${escapeHtml(job.status)}</span> ·
                         匹配分：<span id="job-score-${job.id}" class="font-medium">${job.match_score ?? "-"}</span>
                     </p>
+                    <p class="text-xs text-indigo-600 mt-2">
+                        建议下一步：<span class="font-semibold">${escapeHtml(nextAction.label)}</span>
+                        <span class="text-slate-400"> · ${escapeHtml(nextAction.hint)}</span>
+                    </p>
                 </div>
-                <div class="flex flex-wrap gap-1.5 shrink-0">
-                    <button class="btn btn-secondary" onclick="analyzeJob(${job.id})"><iconify-icon icon="solar:magic-stick-3-bold-duotone"></iconify-icon>分析</button>
-                    <button class="btn btn-secondary" onclick="showAnalysis(${job.id})"><iconify-icon icon="solar:chart-2-bold-duotone"></iconify-icon>详情</button>
-                    <button class="btn btn-primary" onclick="generateResume(${job.id})"><iconify-icon icon="solar:document-text-bold-duotone"></iconify-icon>简历</button>
-                    <button class="btn btn-secondary" onclick="showResumeVersions(${job.id})"><iconify-icon icon="solar:documents-bold-duotone"></iconify-icon>版本</button>
-                    <button class="btn btn-secondary" onclick="generateCoverLetter(${job.id})"><iconify-icon icon="solar:letter-bold-duotone"></iconify-icon>Cover Letter</button>
-                    <button class="btn btn-secondary" onclick="generateInterviewPrep(${job.id})"><iconify-icon icon="solar:notebook-bold-duotone"></iconify-icon>面试</button>
+                <div class="job-actions flex flex-wrap gap-1.5 shrink-0">
+                    ${renderJobActionButtons(job, nextAction)}
                 </div>
             </div>
             <div id="job-result-${job.id}" class="text-sm mt-3 text-slate-600"></div>
         </article>
-    `).join("");
+    `;
+    }).join("");
 
     const totalPages = Math.ceil((data.total || 0) / JOBS_PER_PAGE);
     let paginationHtml = "";
@@ -261,6 +367,7 @@ async function analyzeJob(jobId) {
             const newStatus = ["A", "B"].includes(analysis.recommendation_level) ? "recommended" : "analyzed";
             updateJobCardMeta(jobId, analysis.match_score, newStatus);
             loadStats();
+            loadOnboardingStatus();
             if (data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
         } else {
             result.textContent = `分析失败：${data.detail || data.message}`;
@@ -305,6 +412,7 @@ async function generateResume(jobId) {
         if (data.success) {
             updateJobCardMeta(jobId, null, "resume_generated");
             loadStats();
+            loadOnboardingStatus();
             if (data.ai_usage_count !== undefined) updateTrialUI(data.ai_usage_count);
         }
     } finally {
@@ -448,7 +556,10 @@ function renderResumePanel(version) {
                     <div class="font-semibold text-sm">简历版本 #${version.id}</div>
                     <div class="text-xs text-slate-500 mt-0.5">${escapeHtml(version.title || "")} · ${escapeHtml(version.created_at || "")}</div>
                 </div>
-                <button class="btn btn-secondary" onclick="copyResumeContent(${version.id})"><iconify-icon icon="solar:copy-bold-duotone"></iconify-icon>复制</button>
+                <div class="flex flex-wrap gap-2 shrink-0">
+                    <button class="btn btn-secondary" onclick="copyResumeContent(${version.id})"><iconify-icon icon="solar:copy-bold-duotone"></iconify-icon>复制</button>
+                    <button class="btn btn-secondary" onclick="downloadApiFile('/api/resumes/${version.id}/download', 'resume-${version.id}.md')"><iconify-icon icon="solar:download-bold-duotone"></iconify-icon>下载 MD</button>
+                </div>
             </div>
             ${warnings.length ? `
                 <div>
@@ -485,6 +596,44 @@ async function copyResumeContent(versionId) {
     if (!el) return;
     await navigator.clipboard.writeText(el.innerText);
     showToast("已复制到剪贴板");
+}
+
+function getDownloadFilename(disposition, fallbackName) {
+    if (!disposition) return fallbackName;
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match) {
+        try { return decodeURIComponent(utf8Match[1].replaceAll('"', "")); } catch {}
+    }
+    const asciiMatch = disposition.match(/filename="?([^";]+)"?/i);
+    return asciiMatch ? asciiMatch[1] : fallbackName;
+}
+
+async function downloadApiFile(url, fallbackName) {
+    try {
+        const res = await fetch(url);
+        if (!res.ok) {
+            let message = "下载失败";
+            try {
+                const data = await res.json();
+                message = data.detail || data.message || message;
+            } catch {}
+            showToast(message, "error");
+            return;
+        }
+        const blob = await res.blob();
+        const filename = getDownloadFilename(res.headers.get("Content-Disposition"), fallbackName);
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = href;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(href);
+        showToast("文件已开始下载");
+    } catch {
+        showToast("下载失败", "error");
+    }
 }
 
 async function loadEvidence() {
@@ -527,6 +676,7 @@ async function importResumePdf(event) {
         showToast(`已导入 ${data.count} 条证据`);
         form.reset();
         loadEvidence();
+        loadOnboardingStatus();
     } else {
         result.textContent = `导入失败：${data.detail || data.message}`;
         showToast(data.detail || data.message || "导入失败", "error");
@@ -550,6 +700,7 @@ async function createEvidence(event) {
     if (data.success) {
         form.reset();
         loadEvidence();
+        loadOnboardingStatus();
         showToast("证据已保存");
     } else {
         showToast(data.detail || data.message || "保存失败", "error");
@@ -562,6 +713,7 @@ async function deleteEvidence(id) {
     const data = await res.json();
     if (data.success) {
         loadEvidence();
+        loadOnboardingStatus();
         showToast("证据已删除");
     } else {
         showToast(data.detail || data.message || "删除失败", "error");
@@ -677,7 +829,10 @@ function renderCoverLetterPanel(cl) {
                     <div class="font-semibold text-sm">Cover Letter #${cl.id}</div>
                     <div class="text-xs text-slate-500 mt-0.5">${escapeHtml(cl.title || "")} · ${escapeHtml(cl.created_at || "")}</div>
                 </div>
-                <button class="btn btn-secondary" onclick="copyCoverLetterContent(${cl.id})"><iconify-icon icon="solar:copy-bold-duotone"></iconify-icon>复制</button>
+                <div class="flex flex-wrap gap-2 shrink-0">
+                    <button class="btn btn-secondary" onclick="copyCoverLetterContent(${cl.id})"><iconify-icon icon="solar:copy-bold-duotone"></iconify-icon>复制</button>
+                    <button class="btn btn-secondary" onclick="downloadApiFile('/api/cover-letters/${cl.id}/download', 'cover-letter-${cl.id}.md')"><iconify-icon icon="solar:download-bold-duotone"></iconify-icon>下载 MD</button>
+                </div>
             </div>
             ${highlights.length ? `<div><div class="font-semibold text-sm text-slate-800">核心亮点</div><div class="flex flex-wrap gap-1.5 mt-2">${highlights.map((h) => `<span class="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium">${escapeHtml(h)}</span>`).join("")}</div></div>` : ""}
             ${evidenceLinks.length ? `<div><div class="font-semibold text-sm text-slate-800">引用证据</div><ul class="mt-2 space-y-1.5">${evidenceLinks.slice(0, 6).map((e) => `<li class="bg-emerald-50 rounded-lg p-2.5 text-emerald-700 text-sm">证据 #${escapeHtml(e.evidence_id)}：${escapeHtml(e.bullet_text || "")}</li>`).join("")}</ul></div>` : ""}
@@ -736,6 +891,13 @@ function renderInterviewPrepPanel(prep) {
 
     return `
         <div class="mt-4 border-t border-slate-100 pt-4 space-y-4">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <div class="font-semibold text-sm text-slate-800">面试准备 #${prep.id}</div>
+                    <div class="text-xs text-slate-500 mt-0.5">${escapeHtml(prep.title || "")} · ${escapeHtml(prep.created_at || "")}</div>
+                </div>
+                <button class="btn btn-secondary shrink-0" onclick="downloadApiFile('/api/interview-prep/${prep.id}/download', 'interview-prep-${prep.id}.md')"><iconify-icon icon="solar:download-bold-duotone"></iconify-icon>下载 MD</button>
+            </div>
             <div class="font-semibold text-sm text-slate-800">面试问题 (${questions.length})</div>
             <div class="space-y-2.5">
                 ${questions.map((q, i) => {
@@ -977,7 +1139,8 @@ async function kanbanDrop(event, newStatus) {
 // ── End Kanban ─────────────────────────────────────────────────────────
 
 window.addEventListener("load", async () => {
-    checkAuth();
+    if (!checkAuth()) return;
+    loadOnboardingStatus();
     loadKanbanBoard();
     const user = getCurrentUser();
     const el = document.getElementById("current-username");

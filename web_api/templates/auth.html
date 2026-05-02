@@ -146,6 +146,21 @@
         el.classList.remove("hidden");
     }
 
+    function formatApiError(json, fallback) {
+        const detail = json && json.detail;
+        if (typeof detail === "string") return detail;
+        if (Array.isArray(detail)) {
+            return detail
+                .map((item) => item.msg || item.message || "")
+                .filter(Boolean)
+                .join("；") || fallback;
+        }
+        if (detail && typeof detail === "object") {
+            return detail.msg || detail.message || fallback;
+        }
+        return fallback;
+    }
+
     async function handleLogin(e) {
         e.preventDefault();
         const form = e.target;
@@ -153,7 +168,7 @@
         try {
             const res = await fetch(API + "/login", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data) });
             const json = await res.json();
-            if (!res.ok) { showError("login-error", json.detail || "登录失败"); return; }
+            if (!res.ok) { showError("login-error", formatApiError(json, "登录失败")); return; }
             localStorage.setItem("token", json.data.token);
             localStorage.setItem("user", JSON.stringify(json.data.user));
             window.location.href = "/app";
@@ -167,7 +182,7 @@
         try {
             const res = await fetch(API + "/register", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data) });
             const json = await res.json();
-            if (!res.ok) { showError("register-error", json.detail || "注册失败"); return; }
+            if (!res.ok) { showError("register-error", formatApiError(json, "注册失败")); return; }
             localStorage.setItem("token", json.data.token);
             localStorage.setItem("user", JSON.stringify(json.data.user));
             window.location.href = "/app";

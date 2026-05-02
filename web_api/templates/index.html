@@ -42,6 +42,20 @@
         .toast { position: fixed; bottom: 24px; right: 24px; z-index: 9999; animation: slideUp 0.3s ease-out; }
         @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24'%3E%3Cpath fill='%2394a3b8' d='m12 15.4l-6-6L7.4 8l4.6 4.6L16.6 8L18 9.4z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; }
+        @media (max-width: 900px) {
+            body { flex-direction: column; height: auto; min-height: 100vh; overflow-x: hidden; overflow-y: auto; }
+            aside { width: 100% !important; border-right: 0; border-bottom: 1px solid #e2e8f0; }
+            aside > div:first-child { padding: 12px 16px; }
+            aside nav { display: flex; gap: 6px; overflow-x: auto; padding: 8px; flex: none; }
+            aside nav .nav-item { width: auto; flex: 0 0 auto; white-space: nowrap; }
+            aside > div:last-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; }
+            #ai-trial-badge { margin-bottom: 0 !important; min-width: 128px; }
+            main { padding: 16px !important; overflow: visible; max-width: 100%; }
+            .job-card-top { flex-direction: column; align-items: stretch; }
+            .job-actions { width: 100%; }
+            .job-actions .btn { flex: 1 1 96px; justify-content: center; }
+            .kanban-column { min-width: 220px; }
+        }
     </style>
 </head>
 <body class="h-screen flex overflow-hidden text-slate-800 bg-slate-50">
@@ -98,6 +112,8 @@
 
     <!-- Main -->
     <main class="flex-1 overflow-auto p-8">
+        <div id="onboarding-panel" class="hidden mb-6"></div>
+
         <!-- Import -->
         <section id="page-import" class="hidden">
             <div class="mb-8">

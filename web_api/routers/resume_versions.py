@@ -15,6 +15,7 @@ from src.helpers import load_config
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
 from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
+from web_api.routers._download_utils import build_filename, markdown_response
 
 router = APIRouter()
 
@@ -198,6 +199,20 @@ async def list_resume_versions(
             "page": page,
             "per_page": per_page,
         }
+    finally:
+        db.close()
+
+
+@router.get("/{version_id}/download")
+async def download_resume_version(version_id: int, current_user: User = Depends(get_current_user)):
+    """下载简历版本 Markdown 文件"""
+    db = get_db()
+    try:
+        rv = db.get_resume_version_by_id(version_id)
+        if not rv or rv.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="简历版本不存在")
+        filename = build_filename("resume", rv.title or f"version-{rv.id}")
+        return markdown_response(rv.content or "", filename)
     finally:
         db.close()
 

@@ -15,6 +15,7 @@ from src.helpers import load_config
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
 from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
+from web_api.routers._download_utils import build_filename, markdown_response
 
 router = APIRouter()
 
@@ -145,6 +146,20 @@ async def get_job_cover_letters(job_id: int, current_user: User = Depends(get_cu
             raise HTTPException(status_code=404, detail="岗位不存在")
         letters = db.get_cover_letters_by_job(job_id)
         return {"success": True, "data": [_cl_to_dict(cl) for cl in letters]}
+    finally:
+        db.close()
+
+
+@router.get("/{cl_id}/download")
+async def download_cover_letter(cl_id: int, current_user: User = Depends(get_current_user)):
+    """下载求职信 Markdown 文件"""
+    db = get_db()
+    try:
+        cl = db.get_cover_letter_by_id(cl_id)
+        if not cl or cl.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="求职信不存在")
+        filename = build_filename("cover-letter", cl.title or f"letter-{cl.id}")
+        return markdown_response(cl.content or "", filename)
     finally:
         db.close()
 

@@ -15,6 +15,7 @@ from src.helpers import load_config
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
 from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
+from web_api.routers._download_utils import build_filename, interview_prep_to_markdown, markdown_response
 
 router = APIRouter()
 
@@ -145,6 +146,20 @@ async def get_job_interview_preps(job_id: int, current_user: User = Depends(get_
             raise HTTPException(status_code=404, detail="岗位不存在")
         preps = db.get_interview_preps_by_job(job_id)
         return {"success": True, "data": [_prep_to_dict(p) for p in preps]}
+    finally:
+        db.close()
+
+
+@router.get("/{prep_id}/download")
+async def download_interview_prep(prep_id: int, current_user: User = Depends(get_current_user)):
+    """下载面试准备 Markdown 文件"""
+    db = get_db()
+    try:
+        prep = db.get_interview_prep_by_id(prep_id)
+        if not prep or prep.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="面试准备不存在")
+        filename = build_filename("interview-prep", prep.title or f"prep-{prep.id}")
+        return markdown_response(interview_prep_to_markdown(prep), filename)
     finally:
         db.close()
 
