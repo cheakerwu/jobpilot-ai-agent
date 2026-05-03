@@ -87,10 +87,51 @@ function updateFilePickerLabel(input) {
     fileNameEl.textContent = fileName || defaultText;
 }
 
+function shouldRelaxFileAccept() {
+    const ua = navigator.userAgent || "";
+    return /MicroMessenger|iPhone|iPad|iPod|Android/i.test(ua);
+}
+
+function prepareFileInputForBrowser(input) {
+    if (!input.dataset.originalAccept) {
+        input.dataset.originalAccept = input.getAttribute("accept") || "";
+    }
+    if (shouldRelaxFileAccept() && input.dataset.originalAccept) {
+        input.removeAttribute("accept");
+    }
+}
+
+function openFileInput(input) {
+    if (!input) return;
+    try {
+        input.focus({preventScroll: true});
+    } catch {
+        input.focus();
+    }
+    input.click();
+}
+
+function ensureUploadFileSelected(form, resultEl) {
+    const input = form.querySelector(".file-picker-input");
+    if (!input || input.files?.length) return true;
+
+    const message = input.dataset.emptyMessage || "请先选择要上传的文件";
+    if (resultEl) resultEl.textContent = message;
+    showToast(message, "info");
+    openFileInput(input);
+    return false;
+}
+
 function initFilePickers() {
     document.querySelectorAll(".file-picker-input").forEach((input) => {
+        prepareFileInputForBrowser(input);
         updateFilePickerLabel(input);
         input.addEventListener("change", () => updateFilePickerLabel(input));
+        input.closest(".file-picker")?.addEventListener("click", (event) => {
+            if (event.target === input) return;
+            event.preventDefault();
+            openFileInput(input);
+        });
         input.form?.addEventListener("reset", () => {
             setTimeout(() => updateFilePickerLabel(input), 0);
         });
@@ -413,6 +454,7 @@ async function importCsv(event) {
     event.preventDefault();
     const form = event.target;
     const result = document.getElementById("csv-import-result");
+    if (!ensureUploadFileSelected(form, result)) return;
     const body = new FormData(form);
     result.textContent = "正在导入...";
 
@@ -434,6 +476,7 @@ async function importJdPdf(event) {
     event.preventDefault();
     const form = event.target;
     const result = document.getElementById("pdf-jd-import-result");
+    if (!ensureUploadFileSelected(form, result)) return;
     const body = new FormData(form);
     result.textContent = "正在识别 PDF JD...";
 
@@ -878,6 +921,7 @@ async function importResumePdf(event) {
     event.preventDefault();
     const form = event.target;
     const result = document.getElementById("resume-pdf-import-result");
+    if (!ensureUploadFileSelected(form, result)) return;
     const body = new FormData(form);
     result.textContent = "正在识别 PDF 简历...";
 

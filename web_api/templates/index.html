@@ -33,10 +33,12 @@
         .input { width: 100%; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 12px; font-size: 14px; transition: all 0.15s ease; }
         .input:focus { outline: none; border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.12); }
         .input::placeholder { color: #94a3b8; }
-        .file-picker { position: relative; display: flex; align-items: center; justify-content: center; min-height: 84px; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 16px; background: #fff; cursor: pointer; transition: all 0.15s ease; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .file-picker { position: relative; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 10px; min-height: 96px; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 14px; background: #fff; cursor: pointer; transition: all 0.15s ease; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         .file-picker:hover, .file-picker:focus-within { border-color: #a5b4fc; background: #f8fafc; box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.10); }
         .file-picker.has-file { border-color: #34d399; background: #f0fdf4; }
-        .file-picker-input { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; opacity: 0.01; cursor: pointer; font-size: 16px; }
+        .file-picker-input { position: static; width: 100%; min-height: 40px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 7px; background: #fff; color: #334155; cursor: pointer; font-size: 13px; }
+        .file-picker-input::file-selector-button { border: 0; border-radius: 8px; margin-right: 10px; padding: 7px 12px; background: #eef2ff; color: #4f46e5; font-weight: 700; cursor: pointer; }
+        .file-picker-input::-webkit-file-upload-button { border: 0; border-radius: 8px; margin-right: 10px; padding: 7px 12px; background: #eef2ff; color: #4f46e5; font-weight: 700; cursor: pointer; }
         .file-picker-visual { pointer-events: none; display: flex; align-items: center; justify-content: center; gap: 10px; color: #475569; text-align: left; }
         .file-picker-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
         .file-picker-title { font-size: 13px; font-weight: 700; color: #334155; }
@@ -292,14 +294,14 @@
                     </button>
                     <div id="manual-import-result" class="text-sm"></div>
                 </form>
-                <form id="csv-import-form" class="card p-6 space-y-4" onsubmit="importCsv(event)">
+                <form id="csv-import-form" class="card p-6 space-y-4" onsubmit="importCsv(event)" novalidate>
                     <div class="flex items-center gap-2 mb-1">
                         <iconify-icon icon="solar:file-bold-duotone" class="text-emerald-500" width="18"></iconify-icon>
                         <h2 class="font-bold text-sm">CSV / Excel 批量导入</h2>
                     </div>
                     <p class="text-xs text-slate-500">支持列名：职位、公司、城市、薪资、岗位描述、任职要求、链接。</p>
                     <label class="file-picker" for="csv-import-file">
-                        <input id="csv-import-file" class="file-picker-input" type="file" name="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel" required>
+                        <input id="csv-import-file" class="file-picker-input" type="file" name="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel" data-empty-message="请先选择 CSV 或 Excel 文件" required>
                         <span class="file-picker-visual">
                             <iconify-icon icon="solar:upload-bold-duotone" class="text-emerald-500" width="24"></iconify-icon>
                             <span class="file-picker-copy">
@@ -313,14 +315,14 @@
                     </button>
                     <div id="csv-import-result" class="text-sm"></div>
                 </form>
-                <form id="pdf-jd-import-form" class="card p-6 space-y-4" onsubmit="importJdPdf(event)">
+                <form id="pdf-jd-import-form" class="card p-6 space-y-4" onsubmit="importJdPdf(event)" novalidate>
                     <div class="flex items-center gap-2 mb-1">
                         <iconify-icon icon="solar:file-send-bold-duotone" class="text-amber-500" width="18"></iconify-icon>
                         <h2 class="font-bold text-sm">PDF JD 导入</h2>
                     </div>
                     <p class="text-xs text-slate-500">上传招聘方 PDF，系统会抽取文本并自动推断职位、公司、城市和薪资。</p>
                     <label class="file-picker" for="pdf-jd-import-file">
-                        <input id="pdf-jd-import-file" class="file-picker-input" type="file" name="file" accept="application/pdf,.pdf" required>
+                        <input id="pdf-jd-import-file" class="file-picker-input" type="file" name="file" accept="application/pdf,.pdf" data-empty-message="请先选择 PDF JD 文件" required>
                         <span class="file-picker-visual">
                             <iconify-icon icon="solar:file-send-bold-duotone" class="text-amber-500" width="24"></iconify-icon>
                             <span class="file-picker-copy">
@@ -372,7 +374,7 @@
                 <h1 class="text-xl font-bold">个人经历证据库</h1>
                 <p class="text-sm text-slate-500 mt-1">简历生成只能引用这里的真实证据。</p>
             </div>
-            <form class="card p-5 flex flex-col xl:flex-row xl:items-end gap-4 mb-5" onsubmit="importResumePdf(event)">
+            <form id="resume-pdf-import-form" class="card p-5 flex flex-col xl:flex-row xl:items-end gap-4 mb-5" onsubmit="importResumePdf(event)" novalidate>
                 <div class="flex-1">
                     <div class="flex items-center gap-2 mb-2">
                         <iconify-icon icon="solar:document-add-bold-duotone" class="text-indigo-500" width="18"></iconify-icon>
@@ -380,7 +382,7 @@
                     </div>
                     <p class="text-xs text-slate-500 mb-3">上传已有 PDF 简历，自动抽取技能、项目、工作经历并写入证据库。</p>
                     <label class="file-picker" for="resume-pdf-import-file">
-                        <input id="resume-pdf-import-file" class="file-picker-input" type="file" name="file" accept="application/pdf,.pdf" required>
+                        <input id="resume-pdf-import-file" class="file-picker-input" type="file" name="file" accept="application/pdf,.pdf" data-empty-message="请先选择 PDF 简历文件" required>
                         <span class="file-picker-visual">
                             <iconify-icon icon="solar:document-add-bold-duotone" class="text-indigo-500" width="24"></iconify-icon>
                             <span class="file-picker-copy">
@@ -452,6 +454,6 @@
         </section>
     </main>
 
-    <script src="/static/js/app.js?v=20260503-ios-file-upload"></script>
+    <script src="/static/js/app.js?v=20260503-mobile-file-upload"></script>
 </body>
 </html>

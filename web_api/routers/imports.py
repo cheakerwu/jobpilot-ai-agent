@@ -408,9 +408,10 @@ async def import_pdf_jd(
             raise HTTPException(status_code=400, detail="文件为空")
         if len(content) > MAX_UPLOAD_SIZE:
             raise HTTPException(status_code=413, detail="文件大小不能超过 10MB")
-        if not filename.lower().endswith(".pdf"):
+        is_pdf_content = content.startswith(b'%PDF-')
+        if not filename.lower().endswith(".pdf") and not is_pdf_content:
             raise HTTPException(status_code=400, detail="请上传 PDF 文件")
-        if not content[:5] == b'%PDF-':
+        if not is_pdf_content:
             raise HTTPException(status_code=400, detail="文件内容不是有效的 PDF 格式")
 
         try:
