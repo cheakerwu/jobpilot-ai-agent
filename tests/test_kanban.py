@@ -84,3 +84,21 @@ def test_move_job_nonexistent(db):
     """不存在的岗位应返回 None"""
     result = db.update_job(99999, status="applied")
     assert result is None
+
+
+def test_stats_summary_counts_statuses_and_top_score(db):
+    """统计摘要应包含看板横幅需要的核心数字"""
+    make_job(db, status="new")
+    make_job(db, status="applied", match_score=71)
+    make_job(db, status="interviewing", match_score=88)
+    make_job(db, status="offer", match_score=82)
+
+    from web_api.routers.stats import build_stats_summary
+
+    summary = build_stats_summary(db.get_all_jobs())
+    assert summary["total_jobs"] == 4
+    assert summary["by_status"]["applied"] == 1
+    assert summary["total_applied"] == 1
+    assert summary["total_interviewing"] == 1
+    assert summary["total_offers"] == 1
+    assert summary["top_match_score"] == 88

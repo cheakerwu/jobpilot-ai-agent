@@ -172,6 +172,119 @@ async function loadStats() {
     document.getElementById("stat-applied").textContent = stats.applied ?? 0;
 }
 
+function renderJdConfidence(confidence) {
+    const container = document.getElementById("smart-jd-confidence");
+    if (!container) return;
+    if (!confidence || Object.keys(confidence).length === 0) {
+        container.innerHTML = "";
+        return;
+    }
+    const labels = {
+        title: "职位",
+        company: "公司",
+        city: "城市",
+        salary: "薪资",
+        url: "链接",
+        description: "描述",
+        requirements: "要求",
+    };
+    container.innerHTML = Object.entries(labels).map(([key, label]) => {
+        const ok = confidence?.[key] === "auto_extracted";
+        const cls = ok ? "confidence-auto" : "confidence-missing";
+        const text = ok ? "已识别" : "待补充";
+        return `<span class="confidence-pill ${cls}">${escapeHtml(label)} · ${escapeHtml(text)}</span>`;
+    }).join("");
+}
+
+function fillSmartJdForm(parsed) {
+    const form = document.getElementById("smart-jd-import-form");
+    if (!form) return;
+    ["title", "company", "city", "salary", "url", "description", "requirements"].forEach((field) => {
+        const input = form.querySelector(`[name="${field}"]`);
+        if (input) input.value = parsed?.[field] || "";
+    });
+}
+
+async function parseJdText() {
+    const raw = document.getElementById("smart-jd-raw-text")?.value.trim() || "";
+    const result = document.getElementById("smart-jd-parse-result");
+    const panel = document.getElementById("smart-jd-result-panel");
+    if (!result || !panel) return;
+    if (raw.length < 10) {
+        result.textContent = "请先粘贴完整一些的 JD 内容。";
+        showToast("JD 内容太短，先多粘贴一点", "info");
+        return;
+    }
+
+    result.textContent = "正在识别...";
+    try {
+        const res = await fetch(`${API_BASE}/imports/parse-jd`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({text: raw}),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            result.textContent = `识别失败：${data.detail || data.message || "请稍后再试"}`;
+            showToast(data.detail || data.message || "识别失败", "error");
+            return;
+        }
+        fillSmartJdForm(data.parsed);
+        renderJdConfidence(data.confidence);
+        panel.classList.remove("hidden");
+        result.textContent = "已识别，可在右侧校正后导入。";
+    } catch {
+        result.textContent = "识别失败，请检查网络或稍后重试。";
+        showToast("识别失败", "error");
+    }
+}
+
+async function quickImportJd(event) {
+    event.preventDefault();
+    const form = event.target;
+    const result = document.getElementById("smart-jd-import-result");
+    const formData = new FormData(form);
+    const payload = {
+        title: formData.get("title") || "",
+        company: formData.get("company") || "",
+        city: formData.get("city") || "",
+        salary: formData.get("salary") || "",
+        url: formData.get("url") || "",
+        description: formData.get("description") || "",
+        requirements: formData.get("requirements") || "",
+        auto_analyze: formData.get("auto_analyze") === "on",
+        use_ai: aiToggleEnabled,
+    };
+    result.textContent = payload.auto_analyze ? "正在导入并分析..." : "正在导入...";
+
+    const res = await fetch(`${API_BASE}/imports/quick-import`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.success) {
+        const analysis = data.analysis;
+        if (analysis?.success) {
+            result.textContent = `导入并分析完成：${data.job.title}，匹配 ${analysis.data?.match_score ?? "-"} 分`;
+            if (analysis.ai_usage_count !== undefined) updateTrialUI(analysis.ai_usage_count);
+        } else if (payload.auto_analyze && analysis) {
+            result.textContent = `导入成功：${data.job.title}。分析未完成：${analysis.message || "请稍后手动分析"}`;
+        } else {
+            result.textContent = `导入成功：${data.job.title}`;
+        }
+        showToast(`已导入：${data.job.title}`);
+        form.reset();
+        document.getElementById("smart-jd-result-panel")?.classList.add("hidden");
+        renderJdConfidence({});
+        loadStats();
+        loadOnboardingStatus();
+    } else {
+        result.textContent = `导入失败：${data.message || data.detail}`;
+        showToast(data.message || data.detail || "导入失败", "error");
+    }
+}
+
 async function importManual(event) {
     event.preventDefault();
     const form = event.target;
@@ -1052,7 +1165,139 @@ const KANBAN_STATUSES = [
     {key: "archived", label: "已归档", color: "gray"},
 ];
 
+const ENCOURAGEMENTS = {
+    empty: [
+        "先导入一个 JD，今天的进度就从这里亮起来。",
+        "空白看板也没关系，第一份岗位会把节奏带起来。",
+    ],
+    started: [
+        "已经收集了 {n} 个岗位，好的机会正在慢慢成形。",
+        "岗位已就位，下一步可以挑一个先分析匹配度。",
+    ],
+    analyzing: [
+        "已经分析了 {n} 个岗位，最高匹配度 {score} 分。",
+        "匹配数据已经有眉目了，优先推进高分岗位会更省力。",
+    ],
+    applying: [
+        "已投递 {n} 个岗位，节奏很稳，继续保持。",
+        "每一次投递都让机会更近一点，今天也在前进。",
+    ],
+    interviewing: [
+        "有 {n} 个面试正在推进，记得把准备材料顺手补齐。",
+        "面试阶段已经启动，你离结果更近了。",
+    ],
+    offer: [
+        "Offer 已经出现了，辛苦推进的结果正在兑现。",
+        "拿到 offer 了，后面可以更从容地比较选择。",
+    ],
+};
+
+const KANBAN_EMPTY_STATES = {
+    new: {title: "还没有新岗位", body: "去导入页粘贴一个 JD 试试看。", accent: "#818cf8"},
+    analyzed: {title: "分析区很安静", body: "把新岗位分析后会来到这里。", accent: "#60a5fa"},
+    recommended: {title: "推荐位待点亮", body: "高匹配岗位会自动浮上来。", accent: "#34d399"},
+    resume_generated: {title: "简历还没生成", body: "为合适岗位产出定制版本。", accent: "#6366f1"},
+    to_apply: {title: "待投递列表空着", body: "准备好材料后放到这里。", accent: "#8b5cf6"},
+    applied: {title: "还没有投递记录", body: "投出第一份后这里会热闹起来。", accent: "#a855f7"},
+    screening: {title: "暂无筛选中岗位", body: "等待反馈时可以先推进下一批。", accent: "#f59e0b"},
+    interviewing: {title: "面试栏待开启", body: "进入面试后记得准备问题清单。", accent: "#fb923c"},
+    offer: {title: "Offer 位在等你", body: "保持节奏，结果会慢慢靠近。", accent: "#10b981"},
+    rejected: {title: "暂时没有拒信", body: "复盘可以之后再慢慢整理。", accent: "#f87171"},
+    archived: {title: "归档区很清爽", body: "结束的机会可以拖到这里。", accent: "#94a3b8"},
+};
+
+async function loadKanbanSummary() {
+    const panel = document.getElementById("kanban-summary-panel");
+    if (!panel) return;
+    panel.innerHTML = "<div class='text-sm text-slate-500'>统计加载中...</div>";
+    try {
+        const res = await fetch(`${API_BASE}/stats/summary`);
+        const data = await res.json();
+        if (!data.success) {
+            panel.innerHTML = "<div class='text-sm text-red-500'>统计加载失败</div>";
+            return;
+        }
+        renderKanbanSummary(data.data);
+    } catch {
+        panel.innerHTML = "<div class='text-sm text-red-500'>统计加载失败</div>";
+    }
+}
+
+function renderKanbanSummary(stats) {
+    const panel = document.getElementById("kanban-summary-panel");
+    if (!panel) return;
+    const byStatus = stats.by_status || {};
+    const tiles = [
+        {label: "总岗位", value: stats.total_jobs ?? 0, icon: "solar:case-minimalistic-bold-duotone", color: "text-indigo-600"},
+        {label: "已投递", value: stats.total_applied ?? byStatus.applied ?? 0, icon: "solar:plain-bold-duotone", color: "text-purple-600"},
+        {label: "面试中", value: stats.total_interviewing ?? byStatus.interviewing ?? 0, icon: "solar:chat-round-check-bold-duotone", color: "text-orange-600"},
+        {label: "Offer", value: stats.total_offers ?? byStatus.offer ?? 0, icon: "solar:star-bold-duotone", color: "text-emerald-600"},
+    ];
+    const encouragement = chooseEncouragement(stats);
+    panel.innerHTML = `
+        <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+            ${tiles.map((tile) => `
+                <div class="kanban-stat-tile p-4">
+                    <div class="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                        <iconify-icon icon="${tile.icon}" class="${tile.color}" width="18"></iconify-icon>${escapeHtml(tile.label)}
+                    </div>
+                    <div class="text-2xl font-bold text-slate-900 mt-2">${tile.value}</div>
+                </div>
+            `).join("")}
+        </div>
+        <div class="encouragement-banner mt-3 p-4 flex items-start gap-3">
+            ${renderSparkleSvg()}
+            <div>
+                <div class="text-sm font-bold text-slate-800">${escapeHtml(encouragement.title)}</div>
+                <div class="text-sm text-slate-500 mt-1">${escapeHtml(encouragement.body)}</div>
+            </div>
+        </div>
+    `;
+}
+
+function chooseEncouragement(stats) {
+    const total = stats.total_jobs ?? 0;
+    const analyzed = stats.total_analyzed ?? 0;
+    const applied = stats.total_applied ?? 0;
+    const interviewing = stats.total_interviewing ?? 0;
+    const offers = stats.total_offers ?? 0;
+    const topScore = stats.top_match_score ?? 0;
+    let group = "empty";
+    if (offers > 0) group = "offer";
+    else if (interviewing > 0) group = "interviewing";
+    else if (applied > 0) group = "applying";
+    else if (analyzed > 0) group = "analyzing";
+    else if (total > 0) group = "started";
+
+    const options = ENCOURAGEMENTS[group] || ENCOURAGEMENTS.empty;
+    const template = options[(total + analyzed + applied + interviewing + offers) % options.length];
+    return {
+        title: group === "empty" ? "今天也可以从一小步开始" : "你的求职进度正在推进",
+        body: template
+            .replaceAll("{n}", String(group === "analyzing" ? analyzed : group === "applying" ? applied : group === "interviewing" ? interviewing : total))
+            .replaceAll("{score}", String(topScore || "-")),
+    };
+}
+
+function renderSparkleSvg() {
+    return `
+        <svg viewBox="0 0 48 48" class="shrink-0" width="42" height="42" aria-hidden="true">
+            <defs>
+                <linearGradient id="sparkleGradient" x1="0" x2="1" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#818cf8"/>
+                    <stop offset="55%" stop-color="#f9a8d4"/>
+                    <stop offset="100%" stop-color="#6ee7b7"/>
+                </linearGradient>
+            </defs>
+            <path fill="url(#sparkleGradient)" d="M24 4l4.8 13.2L42 22l-13.2 4.8L24 40l-4.8-13.2L6 22l13.2-4.8z"/>
+            <circle cx="38" cy="9" r="3" fill="#fde68a"/>
+            <circle cx="11" cy="36" r="2.5" fill="#f9a8d4"/>
+        </svg>
+    `;
+}
+
 async function loadKanbanBoard() {
+    loadKanbanSummary();
     const board = document.getElementById("kanban-board");
     board.innerHTML = "<div class='text-sm text-slate-500'>加载中...</div>";
     const res = await fetch(`${API_BASE}/kanban/board`);
@@ -1074,7 +1319,7 @@ function renderKanbanColumn(status, label, jobs) {
              ondragover="kanbanDragOver(event)" ondragleave="kanbanDragLeave(event)" ondrop="kanbanDrop(event, '${escapeHtml(status)}')">
             <div class="font-semibold text-xs text-slate-600 mb-3 flex items-center uppercase tracking-wide">${escapeHtml(label)}${countBadge}</div>
             <div class="space-y-2 flex-1 min-h-[60px]">
-                ${jobs.map((j) => renderKanbanCard(j)).join("")}
+                ${jobs.length ? jobs.map((j) => renderKanbanCard(j)).join("") : renderKanbanEmptyState(status)}
             </div>
         </div>
     `;
@@ -1093,6 +1338,42 @@ function renderKanbanCard(job) {
             </div>
             ${job.match_score != null ? `<div class="mt-1.5"><span class="px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-medium">匹配 ${job.match_score}</span></div>` : ""}
         </div>
+    `;
+}
+
+function renderKanbanEmptyState(status) {
+    const state = KANBAN_EMPTY_STATES[status] || KANBAN_EMPTY_STATES.new;
+    return `
+        <div class="kanban-empty-state p-4 text-center text-xs text-slate-500">
+            ${renderEmptyMascotSvg(state.accent)}
+            <div class="font-semibold text-slate-700 mt-2">${escapeHtml(state.title)}</div>
+            <div class="mt-1 leading-5">${escapeHtml(state.body)}</div>
+            <button class="btn btn-ghost mt-3 mx-auto text-xs" onclick="goToPage('import')">
+                <iconify-icon icon="solar:import-bold-duotone"></iconify-icon>去导入
+            </button>
+        </div>
+    `;
+}
+
+function renderEmptyMascotSvg(accent) {
+    const color = escapeHtml(accent || "#818cf8");
+    return `
+        <svg viewBox="0 0 120 96" aria-hidden="true">
+            <defs>
+                <linearGradient id="emptyFaceGradient-${color.replace("#", "")}" x1="0" x2="1" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#ffffff"/>
+                    <stop offset="100%" stop-color="#eef2ff"/>
+                </linearGradient>
+            </defs>
+            <path d="M28 70c7 12 55 12 64 0 7-9 4-35-5-46-12-14-42-15-55 0-10 11-11 36-4 46z" fill="url(#emptyFaceGradient-${color.replace("#", "")})" stroke="${color}" stroke-width="3"/>
+            <circle cx="47" cy="50" r="5" fill="#334155"/>
+            <circle cx="73" cy="50" r="5" fill="#334155"/>
+            <path d="M52 65c6 5 13 5 19 0" fill="none" stroke="#64748b" stroke-width="3" stroke-linecap="round"/>
+            <path d="M30 25l-9-12 17 4" fill="#fbcfe8" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>
+            <path d="M89 25l10-12-18 4" fill="#bbf7d0" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>
+            <path d="M18 71l-8 5 8 5 5 8 5-8 8-5-8-5-5-8z" fill="#fde68a"/>
+            <path d="M99 66l-5 3 5 3 3 5 3-5 5-3-5-3-3-5z" fill="#f9a8d4"/>
+        </svg>
     `;
 }
 

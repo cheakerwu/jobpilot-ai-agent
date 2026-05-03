@@ -45,7 +45,7 @@ from web_api.routers import jobs, analytics
 app.include_router(jobs.router, prefix="/api/jobs", tags=["岗位管理"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["数据分析"])
 
-from web_api.routers import imports, evidence, analyses, resume_versions, agent_runs, settings, kanban, cover_letters, interview_prep, onboarding
+from web_api.routers import imports, evidence, analyses, resume_versions, agent_runs, settings, kanban, cover_letters, interview_prep, onboarding, stats
 
 app.include_router(imports.router, prefix="/api/imports", tags=["岗位导入"])
 app.include_router(evidence.router, prefix="/api/evidence", tags=["证据库"])
@@ -54,6 +54,7 @@ app.include_router(resume_versions.router, prefix="/api/resumes", tags=["简历�
 app.include_router(agent_runs.router, prefix="/api/agent-runs", tags=["Agent 运行记录"])
 app.include_router(settings.router, prefix="/api/settings", tags=["系统设置"])
 app.include_router(kanban.router, prefix="/api/kanban", tags=["看板"])
+app.include_router(stats.router, prefix="/api/stats", tags=["统计"])
 app.include_router(cover_letters.router, prefix="/api/cover-letters", tags=["求职信"])
 app.include_router(interview_prep.router, prefix="/api/interview-prep", tags=["面试准备"])
 app.include_router(onboarding.router, prefix="/api/onboarding", tags=["新手进度"])

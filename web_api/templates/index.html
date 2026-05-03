@@ -39,6 +39,47 @@
         .kanban-card { cursor: grab; transition: all 0.15s ease; }
         .kanban-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); transform: translateY(-1px); }
         .kanban-card.dragging { opacity: 0.4; }
+        .soft-grid-bg {
+            background-image:
+                radial-gradient(circle at 1px 1px, rgba(99, 102, 241, 0.12) 1px, transparent 0),
+                linear-gradient(135deg, rgba(238, 242, 255, 0.92), rgba(255, 241, 242, 0.76) 50%, rgba(236, 253, 245, 0.78));
+            background-size: 18px 18px, 100% 100%;
+        }
+        .smart-import-card {
+            border-color: #c7d2fe;
+            box-shadow: 0 8px 28px rgba(129, 140, 248, 0.12);
+        }
+        .confidence-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .confidence-auto { background: #ecfdf5; color: #047857; }
+        .confidence-missing { background: #fff7ed; color: #c2410c; }
+        .kanban-summary-panel {
+            border: 1px solid #dbe3ff;
+            border-radius: 12px;
+            box-shadow: 0 8px 26px rgba(129, 140, 248, 0.13);
+        }
+        .kanban-stat-tile {
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid rgba(255, 255, 255, 0.86);
+            border-radius: 12px;
+        }
+        .encouragement-banner {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(255, 247, 237, 0.82));
+            border: 1px solid rgba(253, 186, 116, 0.26);
+            border-radius: 12px;
+        }
+        .kanban-empty-state {
+            border: 1px dashed #dbe3ff;
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(238, 242, 255, 0.62));
+        }
+        .kanban-empty-state svg { width: 86px; height: 72px; }
         .toast { position: fixed; bottom: 24px; right: 24px; z-index: 9999; animation: slideUp 0.3s ease-out; }
         @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24'%3E%3Cpath fill='%2394a3b8' d='m12 15.4l-6-6L7.4 8l4.6 4.6L16.6 8L18 9.4z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 32px; }
@@ -121,6 +162,53 @@
                 <p class="text-sm text-slate-500 mt-1">使用稳定入口建立岗位池，不依赖招聘平台反爬。</p>
             </div>
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+                <form id="smart-jd-import-form" class="card smart-import-card soft-grid-bg p-6 xl:col-span-3 space-y-5" onsubmit="quickImportJd(event)">
+                    <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <iconify-icon icon="solar:magic-stick-3-bold-duotone" class="text-indigo-500" width="20"></iconify-icon>
+                            <div>
+                                <h2 class="font-bold text-sm">智能粘贴</h2>
+                                <p class="text-xs text-slate-500 mt-0.5">粘贴完整 JD，先识别，再确认导入。</p>
+                            </div>
+                        </div>
+                        <div id="smart-jd-confidence" class="flex flex-wrap gap-1.5"></div>
+                    </div>
+                    <div class="grid grid-cols-1 xl:grid-cols-[1.1fr_1.4fr] gap-5">
+                        <div class="space-y-3">
+                            <div>
+                                <label class="label">完整 JD 内容</label>
+                                <textarea id="smart-jd-raw-text" class="input min-h-72 bg-white/90" name="raw_text" placeholder="把招聘页面里的完整岗位信息粘贴到这里..."></textarea>
+                            </div>
+                            <button class="btn btn-primary w-full justify-center" type="button" onclick="parseJdText()">
+                                <iconify-icon icon="solar:magic-stick-3-bold-duotone"></iconify-icon>粘贴并识别
+                            </button>
+                            <div id="smart-jd-parse-result" class="text-sm"></div>
+                        </div>
+                        <div id="smart-jd-result-panel" class="hidden bg-white/80 border border-indigo-100 rounded-xl p-4 space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label class="label">职位名称</label><input class="input bg-white" name="title" required></div>
+                                <div><label class="label">公司</label><input class="input bg-white" name="company" required></div>
+                                <div><label class="label">城市</label><input class="input bg-white" name="city"></div>
+                                <div><label class="label">薪资</label><input class="input bg-white" name="salary"></div>
+                            </div>
+                            <div><label class="label">岗位链接</label><input class="input bg-white" name="url" placeholder="https://..."></div>
+                            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                <div><label class="label">岗位描述</label><textarea class="input min-h-40 bg-white" name="description" required></textarea></div>
+                                <div><label class="label">任职要求</label><textarea class="input min-h-40 bg-white" name="requirements"></textarea></div>
+                            </div>
+                            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                <label class="inline-flex items-center gap-2 text-sm text-slate-600">
+                                    <input type="checkbox" name="auto_analyze" class="w-4 h-4 accent-indigo-600" checked>
+                                    导入后自动分析
+                                </label>
+                                <button class="btn btn-primary justify-center" type="submit">
+                                    <iconify-icon icon="solar:add-circle-bold-duotone"></iconify-icon>确认导入
+                                </button>
+                            </div>
+                            <div id="smart-jd-import-result" class="text-sm"></div>
+                        </div>
+                    </div>
+                </form>
                 <form id="manual-import-form" class="card p-6 space-y-4" onsubmit="importManual(event)">
                     <div class="flex items-center gap-2 mb-1">
                         <iconify-icon icon="solar:pen-bold-duotone" class="text-indigo-500" width="18"></iconify-icon>
@@ -193,6 +281,7 @@
                 </div>
                 <button class="btn btn-secondary" onclick="loadKanbanBoard()"><iconify-icon icon="solar:refresh-bold-duotone"></iconify-icon>刷新</button>
             </div>
+            <div id="kanban-summary-panel" class="kanban-summary-panel soft-grid-bg p-4 mb-5"></div>
             <div id="kanban-board" class="flex gap-4 overflow-x-auto pb-4"></div>
         </section>
 

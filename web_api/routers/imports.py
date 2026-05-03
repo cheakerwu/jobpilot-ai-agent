@@ -15,6 +15,7 @@ from src.sources.manual_source import ManualJobSource
 from src.sources.csv_source import CsvJobSource
 from src.helpers import load_config
 from src.parsers.pdf import extract_text_from_pdf, infer_job_from_jd_text
+from src.parsers.jd_text import build_jd_confidence, parse_jd_text
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
 
@@ -36,6 +37,159 @@ class ManualImportRequest(BaseModel):
     description: str = Field(..., min_length=1, max_length=20000)
     requirements: Optional[str] = Field("", max_length=20000)
     url: Optional[str] = Field("", max_length=500)
+
+
+class ParseJdRequest(BaseModel):
+    text: str = Field(..., min_length=10, max_length=50000)
+
+
+class QuickImportRequest(ManualImportRequest):
+    auto_analyze: bool = False
+    use_ai: bool = True
+
+
+@router.post("/parse-jd")
+async def parse_jd(req: ParseJdRequest, current_user: User = Depends(get_current_user)):
+    """解析用户粘贴的完整 JD 文本，不保存岗位。"""
+    parsed = parse_jd_text(req.text)
+    confidence = build_jd_confidence(parsed)
+    return {
+        "success": True,
+        "parsed": parsed,
+        "confidence": confidence,
+    }
+
+
+@router.post("/quick-import")
+async def quick_import(req: QuickImportRequest, current_user: User = Depends(get_current_user)):
+    """保存智能粘贴确认后的岗位，并可选立即分析。"""
+    db = get_db()
+    try:
+        source = ManualJobSource()
+        seed = req.url or f"{req.title}|{req.company}|{req.description[:4000]}"
+        raw_job = {
+            **req.model_dump(exclude={"auto_analyze", "use_ai"}),
+            "job_id": "smart_paste_"
+            + str(current_user.id)
+            + "_"
+            + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12],
+        }
+        job_data = source.normalize(raw_job)
+        job_data["source"] = "smart_paste"
+        job_data["platform"] = "smart_paste"
+        job_data["user_id"] = current_user.id
+
+        if not job_data["title"] or not job_data["company"]:
+            raise HTTPException(status_code=400, detail="职位名称和公司名称必填")
+
+        existing = db.get_job_by_platform_id(job_data["job_id"])
+        if existing:
+            return {
+                "success": False,
+                "message": "该岗位已存在",
+                "job_id": existing.id,
+            }
+
+        job = db.add_job(job_data)
+        if not job:
+            raise HTTPException(status_code=500, detail="保存岗位失败")
+
+        db.create_import_batch({
+            "user_id": current_user.id,
+            "source": "smart_paste",
+            "total_count": 1,
+            "success_count": 1,
+            "failed_count": 0,
+        })
+
+        analysis = None
+        if req.auto_analyze:
+            analysis = _analyze_imported_job(db, job.id, current_user, req.use_ai)
+
+        return {
+            "success": True,
+            "message": "岗位导入成功",
+            "job": {
+                "id": job.id,
+                "title": job.title,
+                "company": job.company,
+                "city": job.city,
+                "salary": job.salary,
+            },
+            "analysis": analysis,
+        }
+    finally:
+        db.close()
+
+
+def _analyze_imported_job(db: DatabaseManager, job_id: int, current_user: User, use_ai: bool) -> dict:
+    try:
+        config = load_config()
+        if use_ai:
+            from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
+            from web_api.routers.analyses import _build_analyzer
+
+            check_ai_trial(current_user)
+            analyzer = _build_analyzer(config, db)
+        else:
+            from src.analyzer.rule_based import RuleBasedAnalyzer
+
+            AI_TRIAL_LIMIT = 10
+            consume_ai_trial = None
+            analyzer = RuleBasedAnalyzer()
+
+        from src.agent.workflow import JobAnalysisWorkflow
+        from web_api.routers.analyses import _load_profile, build_score_explanation
+
+        workflow = JobAnalysisWorkflow(
+            db=db,
+            analyzer=analyzer,
+            profile=_load_profile(config),
+            user_id=current_user.id,
+        )
+        result = workflow.run(job_id)
+        if not result.get("success"):
+            return {
+                "success": False,
+                "message": result.get("error", "分析失败"),
+            }
+
+        analysis_data = result.get("analysis", {})
+        analyzer_type = analysis_data.get("analyzer_type", "rule")
+        ai_usage_count = current_user.ai_usage_count or 0
+        if use_ai and analyzer_type not in ("rule", "rule_fallback") and consume_ai_trial:
+            consume_ai_trial(current_user.id, db)
+            refreshed_user = db.get_user_by_id(current_user.id)
+            ai_usage_count = refreshed_user.ai_usage_count if refreshed_user else ai_usage_count
+
+        analysis_data["score_explanation"] = build_score_explanation(
+            analyzer_type=analyzer_type,
+            match_score=analysis_data.get("match_score"),
+            risk_score=analysis_data.get("risk_score"),
+            recommendation_level=analysis_data.get("recommendation_level"),
+            parsed_jd=analysis_data.get("parsed_jd") or {},
+            matched_evidence=analysis_data.get("matched_evidence") or [],
+            gaps=analysis_data.get("gaps") or [],
+        )
+        response = {
+            "success": True,
+            "data": analysis_data,
+            "run_id": result.get("run_id"),
+        }
+        if use_ai:
+            response["ai_usage_count"] = ai_usage_count
+            response["ai_trials_remaining"] = max(0, AI_TRIAL_LIMIT - ai_usage_count)
+        return response
+    except HTTPException as exc:
+        return {
+            "success": False,
+            "message": exc.detail,
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "message": str(exc),
+        }
 
 
 @router.post("/manual")
