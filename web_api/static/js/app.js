@@ -75,6 +75,28 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.style.opacity = "0"; toast.style.transition = "opacity 0.3s"; setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
+function updateFilePickerLabel(input) {
+    const picker = input.closest(".file-picker");
+    const fileNameEl = picker?.querySelector("[data-file-name]");
+    if (!picker || !fileNameEl) return;
+    const defaultText = fileNameEl.dataset.defaultText || fileNameEl.textContent || "未选择文件";
+    fileNameEl.dataset.defaultText = defaultText;
+
+    const fileName = input.files?.[0]?.name || "";
+    picker.classList.toggle("has-file", Boolean(fileName));
+    fileNameEl.textContent = fileName || defaultText;
+}
+
+function initFilePickers() {
+    document.querySelectorAll(".file-picker-input").forEach((input) => {
+        updateFilePickerLabel(input);
+        input.addEventListener("change", () => updateFilePickerLabel(input));
+        input.form?.addEventListener("reset", () => {
+            setTimeout(() => updateFilePickerLabel(input), 0);
+        });
+    });
+}
+
 function switchPage(page, target) {
     document.querySelectorAll("[id^='page-']").forEach((el) => el.classList.add("hidden"));
     document.getElementById(`page-${page}`).classList.remove("hidden");
@@ -1498,6 +1520,7 @@ async function kanbanDrop(event, newStatus) {
 
 window.addEventListener("load", async () => {
     if (!checkAuth()) return;
+    initFilePickers();
     loadOnboardingStatus();
     loadKanbanBoard();
     const user = getCurrentUser();

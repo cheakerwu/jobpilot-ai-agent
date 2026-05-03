@@ -33,6 +33,14 @@
         .input { width: 100%; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 12px; font-size: 14px; transition: all 0.15s ease; }
         .input:focus { outline: none; border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.12); }
         .input::placeholder { color: #94a3b8; }
+        .file-picker { position: relative; display: flex; align-items: center; justify-content: center; min-height: 84px; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 16px; background: #fff; cursor: pointer; transition: all 0.15s ease; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .file-picker:hover, .file-picker:focus-within { border-color: #a5b4fc; background: #f8fafc; box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.10); }
+        .file-picker.has-file { border-color: #34d399; background: #f0fdf4; }
+        .file-picker-input { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; opacity: 0.01; cursor: pointer; font-size: 16px; }
+        .file-picker-visual { pointer-events: none; display: flex; align-items: center; justify-content: center; gap: 10px; color: #475569; text-align: left; }
+        .file-picker-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .file-picker-title { font-size: 13px; font-weight: 700; color: #334155; }
+        .file-picker-filename { max-width: 100%; font-size: 12px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
         .kanban-column { min-width: 230px; max-width: 270px; flex-shrink: 0; }
         .kanban-column.drag-over { background: #eef2ff; border-color: #818cf8; }
@@ -290,9 +298,16 @@
                         <h2 class="font-bold text-sm">CSV / Excel 批量导入</h2>
                     </div>
                     <p class="text-xs text-slate-500">支持列名：职位、公司、城市、薪资、岗位描述、任职要求、链接。</p>
-                    <div class="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-indigo-300 transition-colors">
-                        <input class="input" type="file" name="file" accept=".csv,.xlsx,.xls" required>
-                    </div>
+                    <label class="file-picker" for="csv-import-file">
+                        <input id="csv-import-file" class="file-picker-input" type="file" name="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel" required>
+                        <span class="file-picker-visual">
+                            <iconify-icon icon="solar:upload-bold-duotone" class="text-emerald-500" width="24"></iconify-icon>
+                            <span class="file-picker-copy">
+                                <span class="file-picker-title">选择 CSV / Excel 文件</span>
+                                <span class="file-picker-filename" data-file-name>未选择文件</span>
+                            </span>
+                        </span>
+                    </label>
                     <button class="btn btn-primary w-full justify-center" type="submit">
                         <iconify-icon icon="solar:upload-bold-duotone"></iconify-icon>上传导入
                     </button>
@@ -304,9 +319,16 @@
                         <h2 class="font-bold text-sm">PDF JD 导入</h2>
                     </div>
                     <p class="text-xs text-slate-500">上传招聘方 PDF，系统会抽取文本并自动推断职位、公司、城市和薪资。</p>
-                    <div class="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-indigo-300 transition-colors">
-                        <input class="input" type="file" name="file" accept=".pdf" required>
-                    </div>
+                    <label class="file-picker" for="pdf-jd-import-file">
+                        <input id="pdf-jd-import-file" class="file-picker-input" type="file" name="file" accept="application/pdf,.pdf" required>
+                        <span class="file-picker-visual">
+                            <iconify-icon icon="solar:file-send-bold-duotone" class="text-amber-500" width="24"></iconify-icon>
+                            <span class="file-picker-copy">
+                                <span class="file-picker-title">选择 PDF JD 文件</span>
+                                <span class="file-picker-filename" data-file-name>未选择文件</span>
+                            </span>
+                        </span>
+                    </label>
                     <div><label class="label">职位名称（可选校正）</label><input class="input" name="title"></div>
                     <div><label class="label">公司（可选校正）</label><input class="input" name="company"></div>
                     <button class="btn btn-primary w-full justify-center" type="submit">
@@ -357,7 +379,16 @@
                         <h2 class="font-bold text-sm">PDF 简历导入</h2>
                     </div>
                     <p class="text-xs text-slate-500 mb-3">上传已有 PDF 简历，自动抽取技能、项目、工作经历并写入证据库。</p>
-                    <input class="input" type="file" name="file" accept=".pdf" required>
+                    <label class="file-picker" for="resume-pdf-import-file">
+                        <input id="resume-pdf-import-file" class="file-picker-input" type="file" name="file" accept="application/pdf,.pdf" required>
+                        <span class="file-picker-visual">
+                            <iconify-icon icon="solar:document-add-bold-duotone" class="text-indigo-500" width="24"></iconify-icon>
+                            <span class="file-picker-copy">
+                                <span class="file-picker-title">选择 PDF 简历文件</span>
+                                <span class="file-picker-filename" data-file-name>未选择文件</span>
+                            </span>
+                        </span>
+                    </label>
                 </div>
                 <button class="btn btn-primary" type="submit"><iconify-icon icon="solar:document-add-bold-duotone"></iconify-icon>导入简历证据</button>
                 <div id="resume-pdf-import-result" class="text-sm xl:w-72"></div>
@@ -421,6 +452,6 @@
         </section>
     </main>
 
-    <script src="/static/js/app.js?v=20260503-capture-mvp"></script>
+    <script src="/static/js/app.js?v=20260503-ios-file-upload"></script>
 </body>
 </html>
