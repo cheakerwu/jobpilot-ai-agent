@@ -4,6 +4,7 @@
 import pytest
 from src.sources.manual_source import ManualJobSource
 from src.sources.csv_source import CsvJobSource
+from src.sources.browser_capture_source import BrowserCaptureJobSource
 
 
 def test_manual_source_normalize():
@@ -54,3 +55,39 @@ def test_csv_source_normalize():
     assert result["source"] == "csv"
     assert result["job_id"].startswith("csv_")
     assert result["requirements"] == "职责说明"
+
+
+def test_browser_capture_source_normalize_from_page_text():
+    source = BrowserCaptureJobSource()
+    raw = {
+        "page_title": "Agent 应用工程师招聘_星河科技招聘-BOSS直聘",
+        "page_url": "https://example.com/jobs/agent-engineer",
+        "selected_text": """
+        职位名称：Agent 应用工程师
+        公司：星河科技
+        工作地点：上海
+        薪资：30-45K
+        岗位职责：负责企业级 Agent 应用开发，建设工具调用和评测体系。
+        任职要求：熟悉 Python、FastAPI、LLM 应用开发。
+        """,
+    }
+    result = source.normalize(raw)
+    assert result["title"] == "Agent 应用工程师"
+    assert result["company"] == "星河科技"
+    assert result["city"] == "上海"
+    assert result["salary"] == "30-45K"
+    assert result["url"] == "https://example.com/jobs/agent-engineer"
+    assert result["source"] == "browser_capture"
+    assert result["platform"] == "browser_capture"
+
+
+def test_browser_capture_source_uses_supplied_job_id():
+    source = BrowserCaptureJobSource()
+    result = source.normalize({
+        "job_id": "browser_capture_1_abc",
+        "title": "后端工程师",
+        "company": "测试公司",
+        "page_text": "岗位职责：负责后端服务开发",
+    })
+    assert result["job_id"] == "browser_capture_1_abc"
+    assert result["requirements"] == "负责后端服务开发"

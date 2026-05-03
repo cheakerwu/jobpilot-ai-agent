@@ -49,6 +49,16 @@
             border-color: #c7d2fe;
             box-shadow: 0 8px 28px rgba(129, 140, 248, 0.12);
         }
+        .capture-card {
+            border-color: #99f6e4;
+            box-shadow: 0 8px 26px rgba(20, 184, 166, 0.12);
+        }
+        .capture-step {
+            min-height: 34px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(204, 251, 241, 0.9);
+        }
         .confidence-pill {
             display: inline-flex;
             align-items: center;
@@ -118,7 +128,7 @@
                 <iconify-icon icon="solar:widget-4-bold-duotone" width="18" class="text-indigo-500"></iconify-icon>看板
             </button>
             <button class="nav-item w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5 text-slate-600" data-page="import" onclick="switchPage('import', this)">
-                <iconify-icon icon="solar:import-bold-duotone" width="18"></iconify-icon>导入岗位
+                <iconify-icon icon="solar:inbox-in-bold-duotone" width="18"></iconify-icon>收集岗位
             </button>
             <button class="nav-item w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5 text-slate-600" data-page="jobs" onclick="switchPage('jobs', this)">
                 <iconify-icon icon="solar:case-round-bold-duotone" width="18"></iconify-icon>岗位池
@@ -158,10 +168,57 @@
         <!-- Import -->
         <section id="page-import" class="hidden">
             <div class="mb-8">
-                <h1 class="text-xl font-bold">导入岗位</h1>
-                <p class="text-sm text-slate-500 mt-1">使用稳定入口建立岗位池，不依赖招聘平台反爬。</p>
+                <h1 class="text-xl font-bold">收集岗位</h1>
+                <p class="text-sm text-slate-500 mt-1">把招聘平台、公司官网、公众号和内推帖里的岗位收进同一个岗位池。</p>
             </div>
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+                <form id="browser-capture-form" class="card capture-card p-6 xl:col-span-3 space-y-5" onsubmit="importBrowserCapture(event)">
+                    <div class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+                                <iconify-icon icon="solar:cursor-square-bold-duotone" class="text-teal-600" width="22"></iconify-icon>
+                            </div>
+                            <div>
+                                <h2 class="font-bold text-sm">网页采集</h2>
+                                <p class="text-xs text-slate-500 mt-1 leading-5">模拟浏览器插件保存当前岗位页。用户主动打开岗位页面后，复制标题、链接和选中文本即可保存。</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-xs text-slate-500 xl:w-[420px]">
+                            <div class="capture-step px-3 py-2 flex items-center gap-1.5"><iconify-icon icon="solar:cursor-bold-duotone" class="text-teal-600"></iconify-icon>打开岗位</div>
+                            <div class="capture-step px-3 py-2 flex items-center gap-1.5"><iconify-icon icon="solar:copy-bold-duotone" class="text-teal-600"></iconify-icon>采集正文</div>
+                            <div class="capture-step px-3 py-2 flex items-center gap-1.5"><iconify-icon icon="solar:case-round-bold-duotone" class="text-teal-600"></iconify-icon>入岗位池</div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 xl:grid-cols-[0.9fr_1.4fr] gap-5">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="label">页面标题</label>
+                                <input class="input" name="page_title" placeholder="如：Agent 应用工程师招聘_某某科技招聘">
+                            </div>
+                            <div>
+                                <label class="label">页面链接</label>
+                                <input class="input" name="page_url" placeholder="https://...">
+                            </div>
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <button class="btn btn-secondary justify-center flex-1" type="button" onclick="fillBrowserCaptureExample()">
+                                    <iconify-icon icon="solar:wand-bold-duotone"></iconify-icon>填入示例
+                                </button>
+                                <button class="btn btn-primary justify-center flex-1" type="submit">
+                                    <iconify-icon icon="solar:inbox-in-bold-duotone"></iconify-icon>保存采集
+                                </button>
+                            </div>
+                            <label class="inline-flex items-center gap-2 text-sm text-slate-600">
+                                <input type="checkbox" name="auto_analyze" class="w-4 h-4 accent-teal-600" checked>
+                                保存后自动分析
+                            </label>
+                            <div id="browser-capture-result" class="text-sm"></div>
+                        </div>
+                        <div>
+                            <label class="label">选中文本 / 页面正文</label>
+                            <textarea class="input min-h-72" name="selected_text" placeholder="从岗位页复制岗位描述、任职要求、薪资城市等内容。插件版会自动填入这里。"></textarea>
+                        </div>
+                    </div>
+                </form>
                 <form id="smart-jd-import-form" class="card smart-import-card soft-grid-bg p-6 xl:col-span-3 space-y-5" onsubmit="quickImportJd(event)">
                     <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
                         <div class="flex items-center gap-2">
@@ -281,7 +338,9 @@
                 </div>
                 <button class="btn btn-secondary" onclick="loadKanbanBoard()"><iconify-icon icon="solar:refresh-bold-duotone"></iconify-icon>刷新</button>
             </div>
-            <div id="kanban-summary-panel" class="kanban-summary-panel soft-grid-bg p-4 mb-5"></div>
+            <div id="kanban-summary-panel" class="kanban-summary-panel soft-grid-bg p-4 mb-5">
+                <div class="text-sm font-semibold text-indigo-600">正在整理你的求职进度...</div>
+            </div>
             <div id="kanban-board" class="flex gap-4 overflow-x-auto pb-4"></div>
         </section>
 
@@ -362,6 +421,6 @@
         </section>
     </main>
 
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/app.js?v=20260503-capture-mvp"></script>
 </body>
 </html>

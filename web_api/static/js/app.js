@@ -124,25 +124,28 @@ function renderOnboardingPanel(status) {
         return;
     }
 
-    panel.className = "mb-6 bg-white border border-slate-200 rounded-xl p-5";
+    panel.className = "mb-6 kanban-summary-panel soft-grid-bg p-5";
     panel.innerHTML = `
         <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-            <div class="min-w-0">
-                <div class="text-sm font-bold text-slate-900">当前进度</div>
-                <div class="text-sm text-slate-500 mt-1">${escapeHtml(next.description || "")}</div>
+            <div class="min-w-0 flex items-start gap-3">
+                ${renderSparkleSvg()}
+                <div>
+                    <div class="text-sm font-bold text-slate-900">当前进度</div>
+                    <div class="text-sm text-slate-500 mt-1">${escapeHtml(next.description || "")}</div>
+                </div>
             </div>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-2 xl:w-[520px]">
                 ${progress.map((item) => {
                     const active = item.key === activeKey;
                     const done = item.completed;
                     const cls = done
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                        ? "bg-emerald-50/90 text-emerald-700 border-emerald-100"
                         : active
-                            ? "bg-indigo-50 text-indigo-700 border-indigo-100"
-                            : "bg-slate-50 text-slate-500 border-slate-100";
+                            ? "bg-indigo-50/90 text-indigo-700 border-indigo-100"
+                            : "bg-white/70 text-slate-500 border-white";
                     const icon = done ? "solar:check-circle-bold" : active ? "solar:play-circle-bold" : "solar:clock-circle-bold";
                     return `
-                        <div class="border rounded-lg px-3 py-2 ${cls}">
+                        <div class="kanban-stat-tile border px-3 py-2 ${cls}">
                             <div class="flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap">
                                 <iconify-icon icon="${icon}" width="14"></iconify-icon>${escapeHtml(item.label)}
                             </div>
@@ -151,7 +154,7 @@ function renderOnboardingPanel(status) {
                     `;
                 }).join("")}
             </div>
-            <button class="btn btn-primary justify-center xl:shrink-0" onclick="goToPage('${escapeHtml(next.action_page || "jobs")}')">
+            <button class="btn btn-primary justify-center xl:shrink-0 px-5 py-3" onclick="goToPage('${escapeHtml(next.action_page || "jobs")}')">
                 <iconify-icon icon="solar:arrow-right-bold-duotone"></iconify-icon>${escapeHtml(next.action_label || "继续")}
             </button>
         </div>
@@ -282,6 +285,80 @@ async function quickImportJd(event) {
     } else {
         result.textContent = `导入失败：${data.message || data.detail}`;
         showToast(data.message || data.detail || "导入失败", "error");
+    }
+}
+
+function fillBrowserCaptureExample() {
+    const form = document.getElementById("browser-capture-form");
+    const result = document.getElementById("browser-capture-result");
+    if (!form) return;
+    form.elements.page_title.value = "Agent 应用工程师招聘_星河智能招聘-BOSS直聘";
+    form.elements.page_url.value = "https://example.com/jobs/agent-application-engineer";
+    form.elements.selected_text.value = `职位名称：Agent 应用工程师
+公司：星河智能
+工作地点：上海
+薪资：30-45K
+
+岗位职责：
+1. 负责企业级 Agent 应用的后端服务、工具调用和工作流编排；
+2. 建设 RAG、评测、日志追踪和灰度发布能力；
+3. 与产品、算法和业务团队一起把复杂业务流程产品化。
+
+任职要求：
+1. 熟悉 Python、FastAPI、SQLAlchemy，有线上服务开发经验；
+2. 了解 LLM 应用开发、Prompt 工程、函数调用或多 Agent 协作；
+3. 有招聘、CRM、知识库或自动化办公系统经验优先。`;
+    if (result) result.textContent = "示例已填入，可以直接点“保存采集”看入库效果。";
+}
+
+async function importBrowserCapture(event) {
+    event.preventDefault();
+    const form = event.target;
+    const result = document.getElementById("browser-capture-result");
+    const formData = new FormData(form);
+    const payload = {
+        page_title: formData.get("page_title") || "",
+        page_url: formData.get("page_url") || "",
+        selected_text: formData.get("selected_text") || "",
+        auto_analyze: formData.get("auto_analyze") === "on",
+        use_ai: aiToggleEnabled,
+    };
+    if (!String(payload.page_title).trim() && !String(payload.selected_text).trim()) {
+        result.textContent = "请先填入页面标题或岗位正文。";
+        showToast("先放一点岗位内容进来", "info");
+        return;
+    }
+
+    result.textContent = payload.auto_analyze ? "正在保存并分析..." : "正在保存...";
+    try {
+        const res = await fetch(`${API_BASE}/imports/capture`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            result.textContent = `保存失败：${data.detail || data.message || "请稍后再试"}`;
+            showToast(data.detail || data.message || "保存失败", "error");
+            return;
+        }
+
+        const analysis = data.analysis;
+        if (analysis?.success) {
+            result.textContent = `已保存并分析：${data.job.title} · ${data.job.company}，匹配 ${analysis.data?.match_score ?? "-"} 分`;
+            if (analysis.ai_usage_count !== undefined) updateTrialUI(analysis.ai_usage_count);
+        } else if (payload.auto_analyze && analysis) {
+            result.textContent = `已保存：${data.job.title}。分析未完成：${analysis.message || "可稍后手动分析"}`;
+        } else {
+            result.textContent = `已保存：${data.job.title} · ${data.job.company}`;
+        }
+        showToast(`已收集：${data.job.title}`);
+        form.reset();
+        loadStats();
+        loadOnboardingStatus();
+    } catch {
+        result.textContent = "保存失败，请检查服务是否正常运行。";
+        showToast("保存失败", "error");
     }
 }
 

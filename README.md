@@ -14,7 +14,7 @@ JobPilot 是一个个人求职 CRM + Agent Copilot。它不再依赖招聘网站
 
 ## 当前能力
 
-- 岗位导入：手动粘贴 JD、CSV/Excel 批量导入、PDF JD 自动识别。
+- 岗位导入：手动粘贴 JD、CSV/Excel 批量导入、PDF JD 自动识别、浏览器插件采集。
 - 岗位管理：分页列表、详情、状态更新、删除。
 - 证据库：维护技能、项目、工作经历、教育经历等事实证据，支持 PDF 简历自动抽取。
 - 岗位分析：规则分析为基础，配置 API Key 后可启用 LLM 增强分析。
@@ -94,6 +94,7 @@ python -m pytest -q
 POST /api/imports/manual
 POST /api/imports/csv
 POST /api/imports/pdf-jd
+POST /api/imports/capture
 GET  /api/imports/{batch_id}
 ```
 
@@ -169,6 +170,7 @@ job_agent/
 │   ├── routers/
 │   ├── static/
 │   └── templates/
+├── browser_extension/  # 本地浏览器岗位采集插件
 ├── requirements.txt
 └── run_web.py
 ```

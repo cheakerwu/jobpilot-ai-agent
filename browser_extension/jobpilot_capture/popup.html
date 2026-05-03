@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JobPilot 岗位采集</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <div class="logo">J</div>
+      <div>
+        <h1>JobPilot</h1>
+        <p>岗位采集</p>
+      </div>
+    </header>
+
+    <section class="panel">
+      <label for="base-url">JobPilot 地址</label>
+      <input id="base-url" type="url" placeholder="http://127.0.0.1:8787">
+      <div class="row">
+        <button id="connect-button" class="button secondary" type="button">连接已登录页面</button>
+        <button id="open-app-button" class="button ghost" type="button">打开 JobPilot</button>
+      </div>
+      <div id="account-status" class="status muted">尚未连接</div>
+    </section>
+
+    <section class="panel">
+      <label class="checkbox">
+        <input id="auto-analyze" type="checkbox" checked>
+        <span>保存后规则分析</span>
+      </label>
+      <label class="checkbox">
+        <input id="use-ai" type="checkbox">
+        <span>启用 AI 分析</span>
+      </label>
+      <button id="capture-button" class="button primary" type="button">保存当前岗位</button>
+      <div id="capture-status" class="status muted">在招聘页面点击保存。</div>
+    </section>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>

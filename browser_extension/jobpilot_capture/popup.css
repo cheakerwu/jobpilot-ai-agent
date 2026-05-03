@@ -1,0 +1,177 @@
+:root {
+  color-scheme: light;
+  font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 360px;
+  margin: 0;
+  background: #f8fafc;
+}
+
+.shell {
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.logo {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #4f46e5, #14b8a6);
+  color: #fff;
+  font-weight: 800;
+}
+
+h1 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 20px;
+}
+
+p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.panel {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+label {
+  display: block;
+  margin-bottom: 7px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+input[type="url"] {
+  width: 100%;
+  height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+}
+
+input[type="url"]:focus {
+  outline: none;
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 116px;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.primary {
+  width: 100%;
+  margin-top: 12px;
+  background: #4f46e5;
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.secondary {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.secondary:hover:not(:disabled) {
+  background: #99f6e4;
+}
+
+.ghost {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.ghost:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+.checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: #14b8a6;
+}
+
+.status {
+  margin-top: 10px;
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.muted {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.success {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.error {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.info {
+  background: #eef2ff;
+  color: #4338ca;
+}

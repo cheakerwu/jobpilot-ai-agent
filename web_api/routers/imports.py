@@ -13,6 +13,7 @@ from typing import Optional
 from src.storage.database import DatabaseManager
 from src.sources.manual_source import ManualJobSource
 from src.sources.csv_source import CsvJobSource
+from src.sources.browser_capture_source import BrowserCaptureJobSource
 from src.helpers import load_config
 from src.parsers.pdf import extract_text_from_pdf, infer_job_from_jd_text
 from src.parsers.jd_text import build_jd_confidence, parse_jd_text
@@ -44,6 +45,22 @@ class ParseJdRequest(BaseModel):
 
 
 class QuickImportRequest(ManualImportRequest):
+    auto_analyze: bool = False
+    use_ai: bool = True
+
+
+class CaptureImportRequest(BaseModel):
+    page_url: Optional[str] = Field("", max_length=1000)
+    page_title: Optional[str] = Field("", max_length=500)
+    selected_text: Optional[str] = Field("", max_length=50000)
+    page_text: Optional[str] = Field("", max_length=50000)
+    title: Optional[str] = Field("", max_length=200)
+    company: Optional[str] = Field("", max_length=200)
+    city: Optional[str] = Field("", max_length=50)
+    salary: Optional[str] = Field("", max_length=100)
+    description: Optional[str] = Field("", max_length=20000)
+    requirements: Optional[str] = Field("", max_length=20000)
+    url: Optional[str] = Field("", max_length=500)
     auto_analyze: bool = False
     use_ai: bool = True
 
@@ -190,6 +207,88 @@ def _analyze_imported_job(db: DatabaseManager, job_id: int, current_user: User, 
             "success": False,
             "message": str(exc),
         }
+
+
+@router.post("/capture")
+async def import_capture(req: CaptureImportRequest, current_user: User = Depends(get_current_user)):
+    """保存用户主动从当前网页采集的岗位内容，可由浏览器插件或页面表单调用。"""
+    db = get_db()
+    try:
+        source = BrowserCaptureJobSource()
+        payload = req.model_dump(exclude={"auto_analyze", "use_ai"})
+        seed = (
+            payload.get("page_url")
+            or payload.get("url")
+            or f"{payload.get('page_title', '')}|{(payload.get('selected_text') or payload.get('page_text') or '')[:4000]}"
+        )
+        payload["job_id"] = (
+            "browser_capture_"
+            + str(current_user.id)
+            + "_"
+            + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
+        )
+        job_data = source.normalize(payload)
+        job_data["user_id"] = current_user.id
+
+        if not job_data["title"]:
+            raise HTTPException(status_code=400, detail="未能识别到职位名称，请补充标题后再保存")
+        if not job_data["company"]:
+            job_data["company"] = "未知公司"
+        if not job_data["description"]:
+            raise HTTPException(status_code=400, detail="未能识别到岗位内容，请补充页面正文或选中文本")
+
+        existing = db.get_job_by_platform_id(job_data["job_id"])
+        if existing:
+            return {
+                "success": False,
+                "message": "该网页岗位已保存过",
+                "job_id": existing.id,
+            }
+
+        job = db.add_job(job_data)
+        if not job:
+            raise HTTPException(status_code=500, detail="保存岗位失败")
+
+        batch = db.create_import_batch({
+            "user_id": current_user.id,
+            "source": "browser_capture",
+            "filename": job_data["url"] or job_data["title"],
+            "total_count": 1,
+            "success_count": 1,
+            "failed_count": 0,
+        })
+
+        analysis = None
+        if req.auto_analyze:
+            analysis = _analyze_imported_job(db, job.id, current_user, req.use_ai)
+
+        parsed = {
+            "title": job.title,
+            "company": job.company,
+            "city": job.city,
+            "salary": job.salary,
+            "description": job.description,
+            "requirements": job.requirements,
+            "url": job.url,
+        }
+        return {
+            "success": True,
+            "message": "网页岗位已保存",
+            "batch_id": batch.id if batch else None,
+            "job": {
+                "id": job.id,
+                "title": job.title,
+                "company": job.company,
+                "city": job.city,
+                "salary": job.salary,
+                "url": job.url,
+            },
+            "parsed": parsed,
+            "confidence": build_jd_confidence(parsed),
+            "analysis": analysis,
+        }
+    finally:
+        db.close()
 
 
 @router.post("/manual")

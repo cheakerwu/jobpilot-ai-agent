@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "JobPilot 岗位采集",
+  "version": "0.1.0",
+  "description": "把当前招聘页保存到本地 JobPilot 岗位池。",
+  "action": {
+    "default_title": "保存到 JobPilot",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ]
+}
