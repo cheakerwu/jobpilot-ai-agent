@@ -4,12 +4,8 @@
 from fastapi import APIRouter, Depends
 from collections import defaultdict
 from statistics import median, mean
-import sys
-import os
-import json
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from src.storage.database import DatabaseManager
+from web_api.deps import get_db
 from src.helpers import load_config, load_user_profile
 from src.analyzer.rule_based import _parse_salary_range
 from src.auth.dependencies import get_current_user
@@ -71,7 +67,7 @@ def _group_stats(jobs_with_mid: list, group_field: str) -> dict:
 async def salary_analysis(current_user: User = Depends(get_current_user)):
     """薪资分析：分布、分组对比、与个人期望对比"""
     config = load_config()
-    db = DatabaseManager(config['storage']['db_path'])
+    db = get_db()
     try:
         jobs = db.get_all_jobs(user_id=current_user.id)
         jobs_with_mid = []

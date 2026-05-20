@@ -2,22 +2,13 @@
 轻量统计 API。
 """
 from fastapi import APIRouter, Depends
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
+from web_api.deps import get_db
 from src.auth.dependencies import get_current_user
-from src.helpers import load_config
-from src.storage.database import DatabaseManager
 from src.storage.models import User
 from web_api.routers.kanban import VALID_STATUSES
 
 router = APIRouter()
-
-
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
 
 
 def build_stats_summary(jobs) -> dict:
@@ -46,13 +37,25 @@ def build_stats_summary(jobs) -> dict:
 
 @router.get("/summary")
 async def stats_summary(current_user: User = Depends(get_current_user)):
-    """返回看板顶部需要的轻量统计。"""
+    """返回看板顶部需要的轻量统计（SQL 聚合，不加载全表）。"""
     db = get_db()
     try:
-        jobs = db.get_all_jobs(user_id=current_user.id)
+        raw = db.get_job_stats(user_id=current_user.id)
+        by_status = {status: raw["by_status"].get(status, 0) for status in VALID_STATUSES}
         return {
             "success": True,
-            "data": build_stats_summary(jobs),
+            "data": {
+                "total_jobs": raw["total"],
+                "by_status": by_status,
+                "top_match_score": raw["top_match_score"],
+                "total_applied": by_status.get("applied", 0),
+                "total_interviewing": by_status.get("interviewing", 0),
+                "total_offers": by_status.get("offer", 0),
+                "total_analyzed": sum(
+                    by_status.get(status, 0)
+                    for status in ("analyzed", "recommended", "resume_generated", "to_apply", "applied", "screening", "interviewing", "offer")
+                ),
+            },
         }
     finally:
         db.close()

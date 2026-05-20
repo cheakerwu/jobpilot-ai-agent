@@ -1,39 +1,20 @@
 """
 简历版本管理 API
 """
-import sys
-import os
-import json
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
-
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 
-from src.storage.database import DatabaseManager
-from src.helpers import load_config
+from web_api.deps import get_db
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
-from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
-from web_api.routers._download_utils import build_filename, markdown_response
+from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, get_ai_limit
+from web_api.routers._download_utils import build_filename, markdown_response, parse_json_field
 
 router = APIRouter()
 
 
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
-
-
 def _rv_to_dict(rv) -> dict:
-    def _parse(field):
-        if not field:
-            return []
-        try:
-            return json.loads(field)
-        except Exception:
-            return field
-
     return {
         "id": rv.id,
         "job_id": rv.job_id,
@@ -41,10 +22,10 @@ def _rv_to_dict(rv) -> dict:
         "title": rv.title,
         "content": rv.content,
         "format": rv.format,
-        "evidence_links": _parse(rv.evidence_links_json),
-        "changed_sections": _parse(rv.changed_sections_json),
-        "risk_warnings": _parse(rv.risk_warnings_json),
-        "keyword_coverage": _parse(rv.keyword_coverage_json) if rv.keyword_coverage_json else {},
+        "evidence_links": parse_json_field(rv.evidence_links_json, []),
+        "changed_sections": parse_json_field(rv.changed_sections_json, []),
+        "risk_warnings": parse_json_field(rv.risk_warnings_json, []),
+        "keyword_coverage": parse_json_field(rv.keyword_coverage_json, {}) if rv.keyword_coverage_json else {},
         "created_at": rv.created_at.isoformat() if rv.created_at else None,
     }
 
@@ -163,7 +144,7 @@ async def generate_resume(req: GenerateResumeRequest, current_user: User = Depen
 
         return {"success": True, "data": _rv_to_dict(rv),
                 "ai_usage_count": current_user.ai_usage_count or 0,
-                "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (current_user.ai_usage_count or 0))}
+                "ai_trials_remaining": max(0, get_ai_limit(current_user) - (current_user.ai_usage_count or 0))}
     finally:
         db.close()
 

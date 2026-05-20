@@ -2,16 +2,11 @@
 共享 LLM provider 构建工具，供各路由复用
 """
 import os
-import sys
-import json
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from fastapi import HTTPException
 from src.helpers import load_config, load_user_profile
 from src.resume.llm_providers import create_llm_provider
 from src.storage.models import User
-
-AI_TRIAL_LIMIT = 10
 
 API_KEY_ENV_MAP = {
     "claude": "ANTHROPIC_API_KEY",
@@ -19,6 +14,15 @@ API_KEY_ENV_MAP = {
     "deepseek": "DEEPSEEK_API_KEY",
     "qwen": "DASHSCOPE_API_KEY",
 }
+
+
+def get_ai_limit(user: User, config: dict = None) -> int:
+    """获取用户的 AI 配额上限。优先用户级，其次全局默认。"""
+    if user.ai_quota is not None:
+        return user.ai_quota
+    if config is None:
+        config = load_config()
+    return config.get("ai_quota", {}).get("default_limit", 10)
 
 
 def build_llm_provider(config: dict = None):
@@ -53,15 +57,21 @@ def get_profile(config: dict = None) -> dict:
     return load_user_profile(config.get("profile_path", "config/user_profile.json"))
 
 
-def check_ai_trial(user: User) -> None:
+def check_ai_trial(user: User, config: dict = None) -> None:
     """检查用户 AI 试用次数，超限则抛 403"""
-    if (user.ai_usage_count or 0) >= AI_TRIAL_LIMIT:
+    limit = get_ai_limit(user, config)
+    if (user.ai_usage_count or 0) >= limit:
         raise HTTPException(
             status_code=403,
-            detail="AI 试用次数已用完（共 10 次）。请关闭 AI 开关使用规则模式。"
+            detail=f"AI 试用次数已用完（上限 {limit} 次）。请联系管理员调整配额。"
         )
 
 
 def consume_ai_trial(user_id: int, db) -> bool:
     """原子性扣减试用次数。返回是否成功（False 表示已用完）。"""
-    return db.try_consume_ai_trial(user_id, AI_TRIAL_LIMIT)
+    config = load_config()
+    user = db.get_user_by_id(user_id)
+    if not user:
+        return False
+    limit = get_ai_limit(user, config)
+    return db.try_consume_ai_trial(user_id, limit)

@@ -2,22 +2,18 @@
 认证路由：注册、登录、用户信息、修改密码
 """
 import re
-import sys
-import os
 import time
 from collections import defaultdict
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
+from web_api.deps import get_db
 from src.auth.security import hash_password, verify_password, create_access_token
 from src.auth.dependencies import get_current_user
-from src.storage.database import DatabaseManager
 from src.storage.models import User
-from src.helpers import load_config
-from web_api.routers._llm_utils import AI_TRIAL_LIMIT
+from web_api.routers._llm_utils import get_ai_limit
 
 router = APIRouter()
 
@@ -39,12 +35,8 @@ def _check_rate_limit(request: Request, key: str, max_requests: int, window_seco
     _rate_limit_store[store_key].append(now)
 
 
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
-
-
 def _user_dict(user: User) -> dict:
+    limit = get_ai_limit(user)
     return {
         "id": user.id,
         "username": user.username,
@@ -52,7 +44,8 @@ def _user_dict(user: User) -> dict:
         "is_active": user.is_active,
         "is_admin": user.is_admin or False,
         "ai_usage_count": user.ai_usage_count or 0,
-        "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (user.ai_usage_count or 0)),
+        "ai_limit": limit,
+        "ai_trials_remaining": max(0, limit - (user.ai_usage_count or 0)),
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 

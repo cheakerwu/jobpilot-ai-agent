@@ -1,20 +1,18 @@
 """
 岗位导入 API（手动粘贴 / CSV 上传）
 """
-import sys
-import os
 import hashlib
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 
+from web_api.deps import get_db
 from src.storage.database import DatabaseManager
+from src.helpers import load_config
 from src.sources.manual_source import ManualJobSource
 from src.sources.csv_source import CsvJobSource
 from src.sources.browser_capture_source import BrowserCaptureJobSource
-from src.helpers import load_config
 from src.parsers.pdf import extract_text_from_pdf, infer_job_from_jd_text
 from src.parsers.jd_text import build_jd_confidence, parse_jd_text
 from src.auth.dependencies import get_current_user
@@ -23,11 +21,6 @@ from src.storage.models import User
 router = APIRouter()
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
-
-
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
 
 
 class ManualImportRequest(BaseModel):
@@ -142,16 +135,17 @@ async def quick_import(req: QuickImportRequest, current_user: User = Depends(get
 def _analyze_imported_job(db: DatabaseManager, job_id: int, current_user: User, use_ai: bool) -> dict:
     try:
         config = load_config()
+        from web_api.routers._llm_utils import get_ai_limit
+
         if use_ai:
-            from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
+            from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial
             from web_api.routers.analyses import _build_analyzer
 
-            check_ai_trial(current_user)
+            check_ai_trial(current_user, config)
             analyzer = _build_analyzer(config, db)
         else:
             from src.analyzer.rule_based import RuleBasedAnalyzer
 
-            AI_TRIAL_LIMIT = 10
             consume_ai_trial = None
             analyzer = RuleBasedAnalyzer()
 
@@ -194,8 +188,9 @@ def _analyze_imported_job(db: DatabaseManager, job_id: int, current_user: User, 
             "run_id": result.get("run_id"),
         }
         if use_ai:
+            limit = get_ai_limit(current_user, config)
             response["ai_usage_count"] = ai_usage_count
-            response["ai_trials_remaining"] = max(0, AI_TRIAL_LIMIT - ai_usage_count)
+            response["ai_trials_remaining"] = max(0, limit - ai_usage_count)
         return response
     except HTTPException as exc:
         return {
@@ -203,9 +198,11 @@ def _analyze_imported_job(db: DatabaseManager, job_id: int, current_user: User, 
             "message": exc.detail,
         }
     except Exception as exc:
+        import logging
+        logging.getLogger("job_agent").error(f"Import failed: {exc}", exc_info=True)
         return {
             "success": False,
-            "message": str(exc),
+            "message": "导入失败，请稍后重试",
         }
 
 

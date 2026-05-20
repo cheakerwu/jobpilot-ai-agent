@@ -7,11 +7,22 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import logging
 import os
 
 from src.helpers import load_config
 
 app = FastAPI(title="JobPilot - 求职 CRM + Agent Copilot", version="3.0")
+
+logger = logging.getLogger("job_agent")
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """全局异常处理：记录详细错误，返回脱敏消息"""
+    logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "服务器内部错误，请稍后重试"})
 
 # CORS 配置：环境变量 > 配置文件 > 默认 *
 _config = load_config()
@@ -45,7 +56,7 @@ from web_api.routers import jobs, analytics
 app.include_router(jobs.router, prefix="/api/jobs", tags=["岗位管理"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["数据分析"])
 
-from web_api.routers import imports, evidence, analyses, resume_versions, agent_runs, settings, kanban, cover_letters, interview_prep, onboarding, stats
+from web_api.routers import imports, evidence, analyses, resume_versions, agent_runs, settings, kanban, cover_letters, interview_prep, onboarding, stats, streaming
 
 app.include_router(imports.router, prefix="/api/imports", tags=["岗位导入"])
 app.include_router(evidence.router, prefix="/api/evidence", tags=["证据库"])
@@ -58,6 +69,7 @@ app.include_router(stats.router, prefix="/api/stats", tags=["统计"])
 app.include_router(cover_letters.router, prefix="/api/cover-letters", tags=["求职信"])
 app.include_router(interview_prep.router, prefix="/api/interview-prep", tags=["面试准备"])
 app.include_router(onboarding.router, prefix="/api/onboarding", tags=["新手进度"])
+app.include_router(streaming.router, prefix="/api/streaming", tags=["流式输出"])
 
 
 @app.get("/login")

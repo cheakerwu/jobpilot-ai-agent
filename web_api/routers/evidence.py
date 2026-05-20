@@ -1,16 +1,11 @@
 """
 个人经历证据库 API
 """
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
-
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
-from src.storage.database import DatabaseManager
-from src.helpers import load_config
+from web_api.deps import get_db
 from src.parsers.pdf import extract_text_from_pdf, parse_resume_text_to_evidence
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
@@ -18,11 +13,6 @@ from src.storage.models import User
 router = APIRouter()
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
-
-
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
 
 
 def _ev_to_dict(ev) -> dict:

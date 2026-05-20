@@ -1,48 +1,29 @@
 """
 面试准备 API
 """
-import sys
-import os
-import json
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
-
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 
-from src.storage.database import DatabaseManager
-from src.helpers import load_config
+from web_api.deps import get_db
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
-from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
-from web_api.routers._download_utils import build_filename, interview_prep_to_markdown, markdown_response
+from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, get_ai_limit
+from web_api.routers._download_utils import build_filename, interview_prep_to_markdown, markdown_response, parse_json_field
 
 router = APIRouter()
 
 
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
-
-
 def _prep_to_dict(prep) -> dict:
-    def _parse(field):
-        if not field:
-            return []
-        try:
-            return json.loads(field)
-        except Exception:
-            return field
-
     return {
         "id": prep.id,
         "job_id": prep.job_id,
         "analysis_id": prep.analysis_id,
         "title": prep.title,
-        "questions": _parse(prep.questions_json),
-        "company_insights": _parse(prep.company_insights_json) if prep.company_insights_json else {},
-        "preparation_tips": _parse(prep.preparation_tips_json),
-        "risk_areas": _parse(prep.risk_areas_json),
+        "questions": parse_json_field(prep.questions_json, []),
+        "company_insights": parse_json_field(prep.company_insights_json, {}) if prep.company_insights_json else {},
+        "preparation_tips": parse_json_field(prep.preparation_tips_json, []),
+        "risk_areas": parse_json_field(prep.risk_areas_json, []),
         "created_at": prep.created_at.isoformat() if prep.created_at else None,
     }
 
@@ -131,7 +112,7 @@ async def generate_interview_prep(req: GeneratePrepRequest, current_user: User =
 
         return {"success": True, "data": _prep_to_dict(prep),
                 "ai_usage_count": current_user.ai_usage_count or 0,
-                "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (current_user.ai_usage_count or 0))}
+                "ai_trials_remaining": max(0, get_ai_limit(current_user) - (current_user.ai_usage_count or 0))}
     finally:
         db.close()
 

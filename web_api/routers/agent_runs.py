@@ -1,23 +1,14 @@
 """
 Agent 运行记录 API
 """
-import sys
-import os
-import json
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
-
 from fastapi import APIRouter, HTTPException, Depends
-from src.storage.database import DatabaseManager
-from src.helpers import load_config
+
+from web_api.deps import get_db
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
+from web_api.routers._download_utils import parse_json_field
 
 router = APIRouter()
-
-
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
 
 
 def _run_to_dict(run) -> dict:
@@ -32,19 +23,11 @@ def _run_to_dict(run) -> dict:
 
 
 def _step_to_dict(step) -> dict:
-    def _parse(field):
-        if not field:
-            return None
-        try:
-            return json.loads(field)
-        except Exception:
-            return field
-
     return {
         "id": step.id,
         "step_name": step.step_name,
         "status": step.status,
-        "output": _parse(step.output_json),
+        "output": parse_json_field(step.output_json, None),
         "started_at": step.started_at.isoformat() if step.started_at else None,
         "finished_at": step.finished_at.isoformat() if step.finished_at else None,
     }

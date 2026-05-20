@@ -1,27 +1,19 @@
 """
 岗位分析 API
 """
-import sys
-import os
 import json
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from src.storage.database import DatabaseManager
-from src.helpers import load_config
+from web_api.deps import get_db
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
-from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, AI_TRIAL_LIMIT
+from web_api.routers._llm_utils import check_ai_trial, consume_ai_trial, get_ai_limit
+from web_api.routers._download_utils import parse_json_field
 
 router = APIRouter()
-
-
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
 
 
 STALE_LLM_ERROR_MARKERS = (
@@ -84,19 +76,11 @@ def _sanitize_analysis_text(
 
 
 def _analysis_to_dict(a) -> dict:
-    def _parse(field):
-        if not field:
-            return []
-        try:
-            return json.loads(field)
-        except Exception:
-            return field
-
-    matched_evidence = _sanitize_payload(_parse(a.matched_evidence_json))
-    gaps = _sanitize_payload(_parse(a.gaps_json))
-    risks = _sanitize_payload(_parse(a.risks_json))
-    do_not_exaggerate = _sanitize_payload(_parse(a.do_not_exaggerate_json))
-    parsed_jd = _sanitize_payload(_parse(a.parsed_jd_json)) if a.parsed_jd_json else {}
+    matched_evidence = _sanitize_payload(parse_json_field(a.matched_evidence_json, []))
+    gaps = _sanitize_payload(parse_json_field(a.gaps_json, []))
+    risks = _sanitize_payload(parse_json_field(a.risks_json, []))
+    do_not_exaggerate = _sanitize_payload(parse_json_field(a.do_not_exaggerate_json, []))
+    parsed_jd = _sanitize_payload(parse_json_field(a.parsed_jd_json, {})) if a.parsed_jd_json else {}
     summary, action_suggestion, analyzer_type = _sanitize_analysis_text(
         a.summary,
         a.action_suggestion,
@@ -262,7 +246,7 @@ async def analyze_job(job_id: int, use_ai: bool = True, current_user: User = Dep
             return {"success": True, "data": analysis_data,
                     "run_id": result.get("run_id"),
                     "ai_usage_count": current_user.ai_usage_count or 0,
-                    "ai_trials_remaining": max(0, AI_TRIAL_LIMIT - (current_user.ai_usage_count or 0))}
+                    "ai_trials_remaining": max(0, get_ai_limit(current_user) - (current_user.ai_usage_count or 0))}
         else:
             raise HTTPException(status_code=500, detail=result.get("error", "分析失败"))
     finally:

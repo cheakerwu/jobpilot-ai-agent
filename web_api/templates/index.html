@@ -152,10 +152,13 @@
             <button class="nav-item w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5 text-slate-600" data-page="analytics" onclick="switchPage('analytics', this)">
                 <iconify-icon icon="solar:chart-2-bold-duotone" width="18"></iconify-icon>数据分析
             </button>
+            <button id="nav-settings" class="nav-item w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5 text-slate-600 hidden" data-page="settings" onclick="switchPage('settings', this)">
+                <iconify-icon icon="solar:settings-bold-duotone" width="18"></iconify-icon>系统设置
+            </button>
         </nav>
         <div class="p-4 border-t border-slate-100">
             <div id="ai-trial-badge" class="mb-3 px-3 py-2 bg-indigo-50 rounded-lg text-center">
-                <span class="text-xs text-indigo-600 font-medium">AI 剩余 <span id="sidebar-trial-count">-</span>/10 次</span>
+                <span class="text-xs text-indigo-600 font-medium">AI 剩余 <span id="sidebar-trial-count">-</span>/<span id="sidebar-trial-limit">10</span> 次</span>
             </div>
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
@@ -348,7 +351,38 @@
                     <h1 class="text-xl font-bold">岗位池</h1>
                     <p class="text-sm text-slate-500 mt-1">批量分析、生成简历并管理岗位状态。</p>
                 </div>
-                <button class="btn btn-secondary" onclick="loadJobs()"><iconify-icon icon="solar:refresh-bold-duotone"></iconify-icon>刷新</button>
+                <div class="flex gap-2">
+                    <button class="btn btn-secondary" onclick="loadJobs()"><iconify-icon icon="solar:refresh-bold-duotone"></iconify-icon>刷新</button>
+                    <div class="relative group">
+                        <button class="btn btn-secondary"><iconify-icon icon="solar:download-bold-duotone"></iconify-icon>导出</button>
+                        <div class="absolute right-0 top-full mt-1 hidden group-hover:block bg-white shadow-lg rounded-lg border border-slate-200 py-1 z-10 min-w-[120px]">
+                            <a href="/api/jobs/export?format=csv" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">导出 CSV</a>
+                            <a href="/api/jobs/export?format=json" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">导出 JSON</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 搜索筛选栏 -->
+            <div class="flex flex-wrap gap-3 mb-4">
+                <input id="jobs-search" type="text" placeholder="搜索岗位名称或公司..."
+                    class="input flex-1 min-w-[200px]" oninput="debounceJobSearch()" />
+                <select id="jobs-filter-status" class="input w-auto" onchange="loadJobs(1)">
+                    <option value="">全部状态</option>
+                    <option value="new">待处理</option>
+                    <option value="analyzed">已分析</option>
+                    <option value="recommended">推荐</option>
+                    <option value="resume_generated">已生成简历</option>
+                    <option value="to_apply">待投递</option>
+                    <option value="applied">已投递</option>
+                    <option value="screening">筛选中</option>
+                    <option value="interviewing">面试中</option>
+                    <option value="offer">Offer</option>
+                    <option value="rejected">已拒绝</option>
+                    <option value="archived">已归档</option>
+                </select>
+                <select id="jobs-filter-city" class="input w-auto" onchange="loadJobs(1)">
+                    <option value="">全部城市</option>
+                </select>
             </div>
             <div id="jobs-list" class="space-y-3"></div>
         </section>
@@ -450,6 +484,60 @@
                     <div class="font-semibold text-sm mb-3">与个人期望对比</div>
                     <div id="salary-expectation-panel" class="text-sm text-slate-600"></div>
                 </div>
+            </div>
+        </section>
+
+        <!-- Settings (Admin) -->
+        <section id="page-settings" class="hidden">
+            <div class="mb-6">
+                <h1 class="text-xl font-bold">系统设置</h1>
+                <p class="text-sm text-slate-500 mt-1">管理 AI 模型配置和用户配额。</p>
+            </div>
+
+            <!-- 全局配额配置 -->
+            <div class="card p-5 mb-5">
+                <div class="font-semibold text-sm mb-3">AI 配额配置</div>
+                <div class="flex items-end gap-4">
+                    <div>
+                        <label class="text-xs text-slate-500">默认配额（次）</label>
+                        <input id="quota-default-limit" type="number" min="1" max="10000" class="input mt-1 w-32" />
+                    </div>
+                    <div class="flex items-center gap-2 pb-0.5">
+                        <input id="quota-reset-monthly" type="checkbox" class="rounded" />
+                        <label class="text-xs text-slate-500">每月重置</label>
+                    </div>
+                    <button onclick="saveQuotaConfig()" class="btn btn-primary text-sm">保存</button>
+                </div>
+            </div>
+
+            <!-- 用户配额管理 -->
+            <div class="card p-5">
+                <div class="font-semibold text-sm mb-3">用户配额管理</div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-slate-500 border-b border-slate-100">
+                                <th class="pb-2 pr-4">用户</th>
+                                <th class="pb-2 pr-4">邮箱</th>
+                                <th class="pb-2 pr-4">已用</th>
+                                <th class="pb-2 pr-4">配额</th>
+                                <th class="pb-2 pr-4">剩余</th>
+                                <th class="pb-2">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="quota-users-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- AI 流式输出测试 -->
+            <div class="card p-5 mt-5">
+                <div class="font-semibold text-sm mb-3">AI 流式输出测试</div>
+                <div class="flex gap-3 mb-3">
+                    <input id="stream-prompt" type="text" class="input flex-1" placeholder="输入 prompt，如：用一句话介绍你自己" />
+                    <button onclick="testStream()" id="stream-btn" class="btn btn-primary text-sm">发送</button>
+                </div>
+                <div id="stream-output" class="text-sm text-slate-700 bg-slate-50 rounded-lg p-4 min-h-[60px] whitespace-pre-wrap hidden"></div>
             </div>
         </section>
     </main>

@@ -2,6 +2,7 @@
 工具函数
 """
 import os
+import time
 import yaml
 import json
 import logging
@@ -45,23 +46,47 @@ _DEFAULT_CONFIG = {
     "server": {"allowed_origins": ["*"]},
 }
 
+# ── Config 缓存 ────────────────────────────────────────────────────────────────
+_config_cache = None
+_config_cache_time = 0
+_CONFIG_TTL = 30  # 秒
+
 
 def load_config(config_path=None):
-    """加载配置文件，支持环境变量覆盖和默认值降级"""
+    """加载配置文件，30 秒内存缓存，支持环境变量覆盖和默认值降级"""
+    global _config_cache, _config_cache_time
+
     if config_path is None:
         config_path = os.environ.get("JOBPILOT_CONFIG", "config/config.yaml")
+        now = time.time()
+        if _config_cache is not None and now - _config_cache_time < _CONFIG_TTL:
+            return _config_cache
 
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
             if config:
+                if config_path == os.environ.get("JOBPILOT_CONFIG", "config/config.yaml"):
+                    _config_cache = config
+                    _config_cache_time = time.time()
                 return config
     except FileNotFoundError:
         pass
     except Exception:
         pass
 
-    return dict(_DEFAULT_CONFIG)
+    default = dict(_DEFAULT_CONFIG)
+    if config_path == os.environ.get("JOBPILOT_CONFIG", "config/config.yaml"):
+        _config_cache = default
+        _config_cache_time = time.time()
+    return default
+
+
+def invalidate_config_cache():
+    """清除 config 缓存，用于 settings 更新后"""
+    global _config_cache, _config_cache_time
+    _config_cache = None
+    _config_cache_time = 0
 
 
 def load_user_profile(profile_path='config/user_profile.json'):

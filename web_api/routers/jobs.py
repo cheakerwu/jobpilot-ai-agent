@@ -1,25 +1,18 @@
 """
 岗位管理 API
 """
+import csv
+import io
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Literal, Optional
-import json
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from src.storage.database import DatabaseManager
-from src.helpers import load_config
+from web_api.deps import get_db
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
 
 router = APIRouter()
-
-
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
 
 
 def _job_to_dict(j, include_analysis: bool = False) -> dict:
@@ -59,15 +52,16 @@ async def list_jobs(
     per_page: int = 20,
     status: Optional[str] = None,
     city: Optional[str] = None,
+    q: Optional[str] = None,
     current_user: User = Depends(get_current_user),
 ):
-    """获取岗位列表（分页）"""
+    """获取岗位列表（分页，支持搜索和筛选）"""
     page = max(1, page)
     per_page = max(1, min(per_page, 100))
     db = get_db()
     try:
-        jobs = db.get_jobs_paginated(page, per_page, status, city, user_id=current_user.id)
-        total = db.get_jobs_count(status, city, user_id=current_user.id)
+        jobs = db.get_jobs_paginated(page, per_page, status, city, user_id=current_user.id, q=q)
+        total = db.get_jobs_count(status, city, user_id=current_user.id, q=q)
         return {
             "success": True,
             "data": [_job_to_dict(j) for j in jobs],
@@ -84,9 +78,10 @@ async def list_jobs(
 async def list_jobs_compat(
     page: int = 1, per_page: int = 20,
     status: Optional[str] = None, city: Optional[str] = None,
+    q: Optional[str] = None,
     current_user: User = Depends(get_current_user),
 ):
-    return await list_jobs(page, per_page, status, city, current_user=current_user)
+    return await list_jobs(page, per_page, status, city, q=q, current_user=current_user)
 
 
 @router.get("/stats")
@@ -96,6 +91,54 @@ async def get_stats(current_user: User = Depends(get_current_user)):
     try:
         stats = db.get_statistics(user_id=current_user.id)
         return {"success": True, "data": stats}
+    finally:
+        db.close()
+
+
+@router.get("/export")
+async def export_jobs(
+    format: str = "csv",
+    current_user: User = Depends(get_current_user),
+):
+    """导出岗位数据（CSV 或 JSON）"""
+    db = get_db()
+    try:
+        jobs = db.get_all_jobs(user_id=current_user.id)
+        rows = []
+        for j in jobs:
+            rows.append({
+                "id": j.id,
+                "title": j.title or "",
+                "company": j.company or "",
+                "city": j.city or "",
+                "salary": j.salary or "",
+                "status": j.status or "",
+                "match_score": j.match_score or "",
+                "source": j.source or "",
+                "url": j.url or "",
+                "created_at": j.created_at.isoformat() if j.created_at else "",
+            })
+
+        if format == "json":
+            import json
+            content = json.dumps(rows, ensure_ascii=False, indent=2)
+            return StreamingResponse(
+                io.BytesIO(content.encode("utf-8")),
+                media_type="application/json",
+                headers={"Content-Disposition": "attachment; filename=jobs_export.json"},
+            )
+
+        # CSV
+        output = io.StringIO()
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8-sig")),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=jobs_export.csv"},
+        )
     finally:
         db.close()
 

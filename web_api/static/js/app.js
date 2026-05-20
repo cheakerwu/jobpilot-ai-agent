@@ -156,6 +156,7 @@ function switchPage(page, target) {
     if (page === "evidence") loadEvidence();
     if (page === "runs") loadRuns();
     if (page === "analytics") loadSalaryAnalytics();
+    if (page === "settings") loadQuotaSettings();
 }
 
 function goToPage(page) {
@@ -496,6 +497,12 @@ async function importJdPdf(event) {
 
 let jobsCurrentPage = 1;
 const JOBS_PER_PAGE = 20;
+let _jobSearchTimer = null;
+
+function debounceJobSearch() {
+    clearTimeout(_jobSearchTimer);
+    _jobSearchTimer = setTimeout(() => loadJobs(1), 300);
+}
 
 function getJobNextAction(job) {
     const status = job.status || "new";
@@ -539,7 +546,14 @@ async function loadJobs(page) {
     if (page !== undefined) jobsCurrentPage = page;
     const container = document.getElementById("jobs-list");
     container.innerHTML = "<div class='text-sm text-slate-500'>加载中...</div>";
-    const res = await fetch(`${API_BASE}/jobs?page=${jobsCurrentPage}&per_page=${JOBS_PER_PAGE}`);
+    const q = document.getElementById("jobs-search")?.value?.trim() || "";
+    const status = document.getElementById("jobs-filter-status")?.value || "";
+    const city = document.getElementById("jobs-filter-city")?.value || "";
+    const params = new URLSearchParams({ page: jobsCurrentPage, per_page: JOBS_PER_PAGE });
+    if (q) params.set("q", q);
+    if (status) params.set("status", status);
+    if (city) params.set("city", city);
+    const res = await fetch(`${API_BASE}/jobs?${params}`);
     const data = await res.json();
     if (!data.success || data.data.length === 0) {
         container.innerHTML = "<div class='card p-5 text-sm text-slate-500'>暂无岗位，先导入一条 JD。</div>";
@@ -588,6 +602,15 @@ async function loadJobs(page) {
     }
 
     container.innerHTML = jobsHtml + paginationHtml;
+
+    // 更新城市下拉框
+    const citySelect = document.getElementById("jobs-filter-city");
+    if (citySelect) {
+        const cities = [...new Set(data.data.map(j => j.city).filter(Boolean))].sort();
+        const currentCity = citySelect.value;
+        citySelect.innerHTML = '<option value="">全部城市</option>' +
+            cities.map(c => `<option value="${escapeHtml(c)}" ${c === currentCity ? 'selected' : ''}>${escapeHtml(c)}</option>`).join("");
+    }
 }
 
 const SPINNER = '<iconify-icon icon="solar:spinner-bold-duotone" class="animate-spin"></iconify-icon>';
@@ -613,7 +636,7 @@ async function analyzeJob(jobId) {
         if (res.status === 403) {
             result.textContent = data.detail || "AI 试用次数已用完";
             showToast("AI 试用次数已用完", "error");
-            updateTrialUI(10);
+            updateTrialUI(_aiLimit);
             return;
         }
         if (data.success) {
@@ -658,7 +681,7 @@ async function generateResume(jobId) {
         if (res.status === 403) {
             result.textContent = data.detail || "AI 试用次数已用完";
             showToast("AI 试用次数已用完", "error");
-            updateTrialUI(10);
+            updateTrialUI(_aiLimit);
             return;
         }
         result.innerHTML = data.success
@@ -1026,13 +1049,17 @@ async function loadRunSteps(runId) {
 
 // ── AI Trial Management ───────────────────────────────────────────────
 
-const AI_TRIAL_LIMIT = 10;
 let aiToggleEnabled = true;
+let _aiLimit = 10;  // 从后端动态获取
 
-function updateTrialUI(aiUsageCount) {
-    const remaining = Math.max(0, AI_TRIAL_LIMIT - (aiUsageCount || 0));
+function updateTrialUI(aiUsageCount, aiLimit) {
+    if (aiLimit !== undefined) _aiLimit = aiLimit;
+    const remaining = Math.max(0, _aiLimit - (aiUsageCount || 0));
     const sidebarEl = document.getElementById("sidebar-trial-count");
+    const limitEl = document.getElementById("sidebar-trial-limit");
     const badge = document.getElementById("ai-trial-badge");
+
+    if (limitEl) limitEl.textContent = _aiLimit;
 
     if (sidebarEl) sidebarEl.textContent = remaining;
 
@@ -1063,7 +1090,7 @@ async function generateCoverLetter(jobId) {
         if (res.status === 403) {
             result.textContent = data.detail || "AI 试用次数已用完";
             showToast("AI 试用次数已用完", "error");
-            updateTrialUI(10);
+            updateTrialUI(_aiLimit);
             return;
         }
         result.innerHTML = data.success
@@ -1121,7 +1148,7 @@ async function generateInterviewPrep(jobId) {
         if (res.status === 403) {
             result.textContent = data.detail || "AI 试用次数已用完";
             showToast("AI 试用次数已用完", "error");
-            updateTrialUI(10);
+            updateTrialUI(_aiLimit);
             return;
         }
         result.innerHTML = data.success
@@ -1576,7 +1603,179 @@ window.addEventListener("load", async () => {
         const meRes = await fetch(`${API_BASE}/auth/me`);
         const meData = await meRes.json();
         if (meData.success) {
-            updateTrialUI(meData.data.ai_usage_count);
+            updateTrialUI(meData.data.ai_usage_count, meData.data.ai_limit);
+            // 管理员显示设置入口
+            if (meData.data.is_admin) {
+                document.getElementById("nav-settings")?.classList.remove("hidden");
+            }
         }
     } catch {}
 });
+
+// ── Settings Page (Admin) ─────────────────────────────────────────────
+
+async function loadQuotaSettings() {
+    try {
+        const [quotaRes, usersRes] = await Promise.all([
+            fetch(`${API_BASE}/settings/ai-quota`),
+            fetch(`${API_BASE}/settings/users`),
+        ]);
+        const quotaData = await quotaRes.json();
+        const usersData = await usersRes.json();
+
+        if (quotaData.success) {
+            document.getElementById("quota-default-limit").value = quotaData.data.default_limit;
+            document.getElementById("quota-reset-monthly").checked = quotaData.data.reset_monthly;
+        }
+
+        if (usersData.success) {
+            renderQuotaUsers(usersData.data, usersData.default_limit);
+        }
+    } catch (e) {
+        showToast("加载配额设置失败", "error");
+    }
+}
+
+function renderQuotaUsers(users, defaultLimit) {
+    const tbody = document.getElementById("quota-users-body");
+    if (!tbody) return;
+    tbody.innerHTML = users.map(u => `
+        <tr class="border-b border-slate-50">
+            <td class="py-2 pr-4 font-medium">${escapeHtml(u.username)}</td>
+            <td class="py-2 pr-4 text-slate-500">${escapeHtml(u.email)}</td>
+            <td class="py-2 pr-4">${u.ai_usage_count}</td>
+            <td class="py-2 pr-4">
+                <input type="number" min="1" max="10000" value="${u.ai_limit}"
+                    class="input w-20 text-center" id="quota-input-${u.id}"
+                    placeholder="${defaultLimit}" />
+            </td>
+            <td class="py-2 pr-4">
+                <span class="${u.ai_remaining <= 0 ? 'text-red-600 font-medium' : 'text-green-600'}">${u.ai_remaining}</span>
+            </td>
+            <td class="py-2 flex gap-2">
+                <button onclick="saveUserQuota(${u.id})" class="text-xs text-indigo-600 hover:underline">保存</button>
+                <button onclick="resetUserUsage(${u.id})" class="text-xs text-amber-600 hover:underline">重置次数</button>
+            </td>
+        </tr>
+    `).join("");
+}
+
+async function saveQuotaConfig() {
+    const defaultLimit = parseInt(document.getElementById("quota-default-limit").value);
+    const resetMonthly = document.getElementById("quota-reset-monthly").checked;
+    try {
+        const res = await fetch(`${API_BASE}/settings/ai-quota`, {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({default_limit: defaultLimit, reset_monthly: resetMonthly}),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast("配额配置已保存");
+            _aiLimit = defaultLimit;
+            loadQuotaSettings();
+        } else {
+            showToast(data.detail || "保存失败", "error");
+        }
+    } catch {
+        showToast("保存失败", "error");
+    }
+}
+
+async function saveUserQuota(userId) {
+    const input = document.getElementById(`quota-input-${userId}`);
+    const quota = input.value ? parseInt(input.value) : null;
+    try {
+        const res = await fetch(`${API_BASE}/settings/users/${userId}/quota`, {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ai_quota: quota}),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast("配额已更新");
+            loadQuotaSettings();
+        } else {
+            showToast(data.detail || "更新失败", "error");
+        }
+    } catch {
+        showToast("更新失败", "error");
+    }
+}
+
+async function resetUserUsage(userId) {
+    if (!confirm("确定重置该用户的 AI 使用次数？")) return;
+    try {
+        const res = await fetch(`${API_BASE}/settings/users/${userId}/reset-usage`, {method: "POST"});
+        const data = await res.json();
+        if (data.success) {
+            showToast("使用次数已重置");
+            loadQuotaSettings();
+        } else {
+            showToast(data.detail || "重置失败", "error");
+        }
+    } catch {
+        showToast("重置失败", "error");
+    }
+}
+
+async function testStream() {
+    const prompt = document.getElementById("stream-prompt").value.trim();
+    if (!prompt) { showToast("请输入 prompt", "error"); return; }
+
+    const output = document.getElementById("stream-output");
+    const btn = document.getElementById("stream-btn");
+    output.classList.remove("hidden");
+    output.textContent = "";
+    btn.disabled = true;
+    btn.textContent = "生成中...";
+
+    try {
+        const res = await fetch(`${API_BASE}/streaming/generate`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify({prompt, use_ai: true}),
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            output.textContent = err.detail || "请求失败";
+            return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, {stream: true});
+
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+                if (!line.startsWith("data: ")) continue;
+                try {
+                    const evt = JSON.parse(line.slice(6));
+                    if (evt.type === "chunk") {
+                        output.textContent += evt.content;
+                    } else if (evt.type === "done") {
+                        if (evt.ai_usage_count !== undefined) updateTrialUI(evt.ai_usage_count, evt.ai_limit);
+                    } else if (evt.type === "error") {
+                        output.textContent += `\n[错误] ${evt.message}`;
+                    }
+                } catch {}
+            }
+        }
+    } catch (e) {
+        output.textContent = `请求失败: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "发送";
+    }
+}

@@ -19,6 +19,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False, nullable=False)
     ai_usage_count = Column(Integer, default=0, nullable=False)
+    ai_quota = Column(Integer, nullable=True)  # NULL = 使用全局默认配额
     created_at = Column(DateTime, default=datetime.now)
 
     def __repr__(self):

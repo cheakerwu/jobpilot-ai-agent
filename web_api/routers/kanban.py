@@ -3,12 +3,8 @@
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from src.storage.database import DatabaseManager
-from src.helpers import load_config
+from web_api.deps import get_db
 from src.auth.dependencies import get_current_user
 from src.storage.models import User
 
@@ -19,11 +15,6 @@ VALID_STATUSES = [
     "to_apply", "applied", "screening", "interviewing",
     "offer", "rejected", "archived",
 ]
-
-
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
 
 
 def _job_card_dict(j) -> dict:

@@ -1,24 +1,14 @@
 """
 Onboarding status API for the app workspace.
 """
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 
+from web_api.deps import get_db
 from src.auth.dependencies import get_current_user
-from src.helpers import load_config
-from src.storage.database import DatabaseManager
 from src.storage.models import EvidenceItem, Job, JobAnalysis, ResumeVersion, User
 
 router = APIRouter()
-
-
-def get_db():
-    config = load_config()
-    return DatabaseManager(config['storage']['db_path'])
 
 
 def _step(key: str, label: str, count: int, completed: bool) -> dict:

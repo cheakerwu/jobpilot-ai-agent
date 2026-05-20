@@ -5,7 +5,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from sqlalchemy import create_engine, desc, text
+from sqlalchemy import create_engine, desc, text, func
 from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,7 @@ class DatabaseManager:
             "users": {
                 "ai_usage_count": "ALTER TABLE users ADD COLUMN ai_usage_count INTEGER DEFAULT 0",
                 "is_admin": "ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0",
+                "ai_quota": "ALTER TABLE users ADD COLUMN ai_quota INTEGER",
             },
         }
 
@@ -121,6 +122,47 @@ class DatabaseManager:
             self.session.rollback()
             return False
 
+    def update_user_quota(self, user_id: int, quota: int | None) -> bool:
+        """设置用户 AI 配额。None 表示使用全局默认。"""
+        try:
+            self.session.query(User).filter(User.id == user_id).update(
+                {User.ai_quota: quota}
+            )
+            self.session.commit()
+            return True
+        except Exception:
+            self.session.rollback()
+            return False
+
+    def reset_user_ai_usage(self, user_id: int) -> bool:
+        """重置用户 AI 使用次数为 0。"""
+        try:
+            self.session.query(User).filter(User.id == user_id).update(
+                {User.ai_usage_count: 0}
+            )
+            self.session.commit()
+            return True
+        except Exception:
+            self.session.rollback()
+            return False
+
+    def get_all_users_summary(self) -> list[dict]:
+        """获取所有用户摘要（管理员用）。"""
+        users = self.session.query(User).order_by(User.id).all()
+        return [
+            {
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "is_admin": u.is_admin or False,
+                "is_active": u.is_active,
+                "ai_usage_count": u.ai_usage_count or 0,
+                "ai_quota": u.ai_quota,
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+            }
+            for u in users
+        ]
+
     # ── Jobs ──────────────────────────────────────────────────────────────────
 
     def add_job(self, job_data: dict) -> Job | None:
@@ -151,6 +193,24 @@ class DatabaseManager:
             query = query.limit(limit)
         return query.all()
 
+    def get_job_stats(self, user_id: int) -> dict:
+        """SQL 聚合查询：按状态统计数量和最高匹配分"""
+        rows = (
+            self.session.query(Job.status, func.count(Job.id), func.max(Job.match_score))
+            .filter(Job.user_id == user_id)
+            .group_by(Job.status)
+            .all()
+        )
+        by_status = {}
+        top_match_score = None
+        total = 0
+        for status, count, max_score in rows:
+            by_status[status] = count
+            total += count
+            if max_score is not None:
+                top_match_score = max_score if top_match_score is None else max(top_match_score, max_score)
+        return {"total": total, "by_status": by_status, "top_match_score": top_match_score}
+
     def update_job(self, job_id: int, **kwargs) -> Job | None:
         try:
             job = self.get_job_by_id(job_id)
@@ -168,7 +228,7 @@ class DatabaseManager:
     def get_jobs_paginated(
         self, page: int = 1, per_page: int = 20,
         status: str | None = None, city: str | None = None,
-        user_id: int | None = None,
+        user_id: int | None = None, q: str | None = None,
     ) -> list[Job]:
         query = self.session.query(Job)
         if user_id is not None:
@@ -177,11 +237,14 @@ class DatabaseManager:
             query = query.filter(Job.status == status)
         if city:
             query = query.filter(Job.city == city)
+        if q:
+            pattern = f"%{q}%"
+            query = query.filter((Job.title.like(pattern)) | (Job.company.like(pattern)))
         query = query.order_by(desc(Job.created_at))
         offset = (page - 1) * per_page
         return query.offset(offset).limit(per_page).all()
 
-    def get_jobs_count(self, status: str | None = None, city: str | None = None, user_id: int | None = None) -> int:
+    def get_jobs_count(self, status: str | None = None, city: str | None = None, user_id: int | None = None, q: str | None = None) -> int:
         query = self.session.query(Job)
         if user_id is not None:
             query = query.filter(Job.user_id == user_id)
@@ -189,6 +252,9 @@ class DatabaseManager:
             query = query.filter(Job.status == status)
         if city:
             query = query.filter(Job.city == city)
+        if q:
+            pattern = f"%{q}%"
+            query = query.filter((Job.title.like(pattern)) | (Job.company.like(pattern)))
         return query.count()
 
     def get_statistics(self, user_id: int | None = None) -> dict:
