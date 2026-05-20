@@ -56,6 +56,13 @@ PROVIDER_META = {
         "supports_thinking": False,
         "supports_base_url": False,
     },
+    "mimo": {
+        "label": "小米 MiMo",
+        "env_key": "MIMO_API_KEY",
+        "models": ["MiMo-v2.5-Pro", "MiMo-v2.5-Flash"],
+        "supports_thinking": False,
+        "supports_base_url": True,
+    },
 }
 
 

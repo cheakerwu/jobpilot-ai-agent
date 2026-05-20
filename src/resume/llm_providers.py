@@ -176,6 +176,16 @@ class QwenProvider(_OpenAICompatibleProvider):
                          enable_thinking=enable_thinking, **kwargs)
 
 
+class MimoProvider(_OpenAICompatibleProvider):
+    """小米 MiMo API 提供商（兼容 OpenAI 格式）"""
+
+    def __init__(self, api_key: str, model: str = "MiMo-v2.5-Pro", max_tokens: int | None = 4096,
+                 base_url: str = None, request_timeout: int = 120, **kwargs):
+        super().__init__(api_key=api_key, model=model, max_tokens=max_tokens,
+                         base_url=base_url or "https://token-plan-cn.xiaomimimo.com/v1",
+                         request_timeout=request_timeout, **kwargs)
+
+
 def create_llm_provider(provider_type: str, api_key: str, config: dict) -> BaseLLMProvider:
     """工厂函数：创建 LLM 提供商实例"""
     providers = {
@@ -183,6 +193,7 @@ def create_llm_provider(provider_type: str, api_key: str, config: dict) -> BaseL
         "openai": OpenAIProvider,
         "deepseek": DeepSeekProvider,
         "qwen": QwenProvider,
+        "mimo": MimoProvider,
     }
 
     provider_class = providers.get(provider_type.lower())

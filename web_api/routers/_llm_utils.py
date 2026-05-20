@@ -13,6 +13,7 @@ API_KEY_ENV_MAP = {
     "openai": "OPENAI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
     "qwen": "DASHSCOPE_API_KEY",
+    "mimo": "MIMO_API_KEY",
 }
 
 
