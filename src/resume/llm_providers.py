@@ -179,11 +179,18 @@ class QwenProvider(_OpenAICompatibleProvider):
 class MimoProvider(_OpenAICompatibleProvider):
     """小米 MiMo API 提供商（兼容 OpenAI 格式）"""
 
-    def __init__(self, api_key: str, model: str = "MiMo-v2.5-Pro", max_tokens: int | None = 4096,
+    def __init__(self, api_key: str, model: str = "mimo-v2.5-pro", max_tokens: int | None = 4096,
                  base_url: str = None, request_timeout: int = 120, **kwargs):
         super().__init__(api_key=api_key, model=model, max_tokens=max_tokens,
                          base_url=base_url or "https://token-plan-cn.xiaomimimo.com/v1",
                          request_timeout=request_timeout, **kwargs)
+
+    def _payload(self, prompt: str, stream: bool = False) -> dict:
+        data = super()._payload(prompt, stream)
+        # MiMo 使用 max_completion_tokens 而非 max_tokens
+        if "max_tokens" in data:
+            data["max_completion_tokens"] = data.pop("max_tokens")
+        return data
 
 
 def create_llm_provider(provider_type: str, api_key: str, config: dict) -> BaseLLMProvider:
