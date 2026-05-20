@@ -1616,12 +1616,14 @@ window.addEventListener("load", async () => {
 
 async function loadQuotaSettings() {
     try {
-        const [quotaRes, usersRes] = await Promise.all([
+        const [quotaRes, usersRes, modelsRes] = await Promise.all([
             fetch(`${API_BASE}/settings/ai-quota`),
             fetch(`${API_BASE}/settings/users`),
+            fetch(`${API_BASE}/settings/models`),
         ]);
         const quotaData = await quotaRes.json();
         const usersData = await usersRes.json();
+        const modelsData = await modelsRes.json();
 
         if (quotaData.success) {
             document.getElementById("quota-default-limit").value = quotaData.data.default_limit;
@@ -1631,8 +1633,88 @@ async function loadQuotaSettings() {
         if (usersData.success) {
             renderQuotaUsers(usersData.data, usersData.default_limit);
         }
+
+        if (modelsData.success) {
+            const c = modelsData.current;
+            document.getElementById("model-provider").value = c.provider;
+            document.getElementById("model-name").value = c.model;
+            document.getElementById("model-base-url").value = c.base_url || "";
+            const keyEl = document.getElementById("api-key-status");
+            if (c.api_key_configured) {
+                keyEl.innerHTML = `<span class="text-green-600">已配置</span> <span class="text-slate-400">${escapeHtml(c.api_key_masked)}</span>`;
+            } else {
+                keyEl.innerHTML = '<span class="text-red-600">未配置</span> <span class="text-slate-400">请在 .env 中设置</span>';
+            }
+            // 缓存 provider 列表供 onProviderChange 使用
+            window._providers = modelsData.providers;
+        }
     } catch (e) {
-        showToast("加载配额设置失败", "error");
+        showToast("加载设置失败", "error");
+    }
+}
+
+function onProviderChange() {
+    const provider = document.getElementById("model-provider").value;
+    const p = (window._providers || []).find(x => x.key === provider);
+    const urlInput = document.getElementById("model-base-url");
+    if (p && !p.supports_base_url) {
+        urlInput.value = "";
+        urlInput.disabled = true;
+        urlInput.placeholder = "该 provider 不支持自定义 URL";
+    } else {
+        urlInput.disabled = false;
+        urlInput.placeholder = "https://api.openai.com/v1";
+    }
+}
+
+async function saveModelConfig() {
+    const provider = document.getElementById("model-provider").value;
+    const model = document.getElementById("model-name").value.trim();
+    const baseUrl = document.getElementById("model-base-url").value.trim();
+    if (!model) { showToast("请输入模型名称", "error"); return; }
+
+    try {
+        const res = await fetch(`${API_BASE}/settings/models`, {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                provider, model, base_url: baseUrl,
+                max_tokens: 2000, rate_limit: null, daily_limit: null,
+                cache_enabled: true, enable_thinking: false,
+            }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast("模型配置已保存");
+        } else {
+            showToast(data.detail || "保存失败", "error");
+        }
+    } catch {
+        showToast("保存失败", "error");
+    }
+}
+
+async function testApiKey() {
+    const btn = document.getElementById("test-key-btn");
+    const result = document.getElementById("test-key-result");
+    btn.disabled = true;
+    btn.textContent = "验证中...";
+    result.classList.remove("hidden");
+    result.innerHTML = '<span class="text-slate-500">正在验证...</span>';
+
+    try {
+        const res = await fetch(`${API_BASE}/settings/models/test`, {method: "POST"});
+        const data = await res.json();
+        if (data.success) {
+            result.innerHTML = `<span class="text-green-600">${escapeHtml(data.message)}</span>`;
+        } else {
+            result.innerHTML = `<span class="text-red-600">${escapeHtml(data.message)}</span>`;
+        }
+    } catch {
+        result.innerHTML = '<span class="text-red-600">验证请求失败</span>';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "验证 Key";
     }
 }
 
